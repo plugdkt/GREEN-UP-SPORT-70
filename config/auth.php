@@ -6,13 +6,17 @@ $is_https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');
     ini_set('session.cookie_httponly', '1');
-    session_set_cookie_params([
-        'lifetime' => 0,
-        'path'     => '/',
-        'secure'   => $is_https,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
+    if (PHP_VERSION_ID >= 70300) {
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path'     => '/',
+            'secure'   => $is_https,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    } else {
+        session_set_cookie_params(0, '/; samesite=Lax', '', $is_https, true);
+    }
     session_start();
 }
 
@@ -100,7 +104,9 @@ function login_rate_limit_check(): array {
     if (file_exists($file)) {
         $data = json_decode((string)@file_get_contents($file), true);
         if (is_array($data)) {
-            $attempts = array_values(array_filter($data, fn($ts) => is_int($ts) && ($now - $ts) < $window));
+            $attempts = array_values(array_filter($data, function ($ts) use ($now, $window) {
+                return is_int($ts) && ($now - $ts) < $window;
+            }));
         }
     }
 
@@ -119,7 +125,9 @@ function login_rate_limit_record_failure(): void {
     if (file_exists($file)) {
         $data = json_decode((string)@file_get_contents($file), true);
         if (is_array($data)) {
-            $attempts = array_values(array_filter($data, fn($ts) => is_int($ts) && ($now - $ts) < $window));
+            $attempts = array_values(array_filter($data, function ($ts) use ($now, $window) {
+                return is_int($ts) && ($now - $ts) < $window;
+            }));
         }
     }
     $attempts[] = $now;

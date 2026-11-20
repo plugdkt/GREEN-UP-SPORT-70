@@ -261,8 +261,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // 9. Create & Update Disbursements
     elseif ($act === 'create_disbursement') {
-        $count = (int)$pdo->query("SELECT COUNT(*) FROM disbursements")->fetchColumn() + 1;
-        $doc_no = sprintf('GRN-2027-%03d', $count + 10);
+        $next_no = (int)$pdo->query("SELECT COALESCE(MAX(id), 0) + 1 FROM disbursements")->fetchColumn();
+        $doc_no = sprintf('GRN-2027-%03d', $next_no + 10);
         $stmt = $pdo->prepare("
             INSERT INTO disbursements (doc_no, tx_date, tranche_no, category_id, sport_id, requester_name, description, requested_amount, tx_status)
             VALUES (:doc_no, :tx_date, :tranche, :cat_id, :sport_id, :req_name, :desc, :amount, 'APPROVED')
@@ -288,7 +288,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
                 tx_status           = :status
             WHERE id = :id
         ");
-        foreach ($_POST['tx'] as $id => $v) {
+        foreach ($_POST['tx'] ?? [] as $id => $v) {
             $stmt->execute([
                 ':spent'  => (float)($v['spent'] ?? 0),
                 ':ret'    => (float)($v['ret'] ?? 0),
@@ -416,7 +416,7 @@ require_once __DIR__ . '/includes/header.php';
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_budget_categories" />
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
-      <h2 style="font-size:1.2rem; font-weight:800;">⚙️ ตั้งค่าการจัดสรรงบประมาณ 3 ก้อน (ฝ่ายงาน 1–6 และชนิดกีฬา 4.1–4.11)</h2>
+      <h2 style="font-size:1.2rem; font-weight:800;">⚙️ ตั้งค่าการจัดสรรงบประมาณ 3 ก้อน (ฝ่ายงาน 1–6 และ 11 ชนิดกีฬา)</h2>
       <button type="submit" class="btn-primary">💾 บันทึกการเปลี่ยนแปลง</button>
     </div>
     <div style="overflow-x:auto;">
@@ -434,7 +434,10 @@ require_once __DIR__ . '/includes/header.php';
         <tbody>
           <?php foreach ($categories as $cat):
             $id = (int)$cat['id'];
-            if ($id === 4) {
+            $is_sports_cat = (($cat['category_code'] ?? '') === 'CAT_SPORTS');
+            $is_buffer_cat = (($cat['category_code'] ?? '') === 'CAT_BUFFER');
+            $cat_num = preg_match('/^(\d+)\./', (string)$cat['category_name'], $m) ? $m[1] : $id;
+            if ($is_sports_cat) {
                 $c1 = $sport_sum_t1; $c2 = $sport_sum_t2; $c3 = $sport_sum_t3;
             } else {
                 $c1 = (float)$cat['alloc_tranche_1'];
@@ -443,10 +446,10 @@ require_once __DIR__ . '/includes/header.php';
             }
             $tot = $c1 + $c2 + $c3;
           ?>
-          <tr style="<?= $id === 4 ? 'background:#f0fdf4;' : ($id === 6 ? 'background:#fefce8;' : '') ?>">
+          <tr style="<?= $is_sports_cat ? 'background:#f0fdf4;' : ($is_buffer_cat ? 'background:#fefce8;' : '') ?>">
             <td><strong><?= h($cat['category_name']) ?></strong><div style="font-size:0.78rem; color:var(--muted);"><?= h($cat['responsible_unit']) ?></div></td>
             <td><input type="text" class="form-control" name="cat[<?= $id ?>][lead]" value="<?= h($cat['lead_person']) ?>" /></td>
-            <?php if ($id === 4): ?>
+            <?php if ($is_sports_cat): ?>
               <td style="text-align:right; font-weight:800; color:var(--green-dark);">
                 <?= number_format($c1) ?> ฿
                 <input type="hidden" name="cat[<?= $id ?>][t1]" value="<?= (int)$c1 ?>" />
@@ -467,7 +470,7 @@ require_once __DIR__ . '/includes/header.php';
             <td style="text-align:right; font-weight:850; color:var(--green-dark);"><?= number_format($tot) ?> ฿</td>
           </tr>
 
-          <?php if ($id === 4): ?>
+          <?php if ($is_sports_cat): ?>
             <?php foreach ($sports as $sp):
               $sid = (int)$sp['id'];
               $sno = (int)$sp['sport_no'];
@@ -478,7 +481,7 @@ require_once __DIR__ . '/includes/header.php';
             ?>
             <tr style="background:#fafdfb;">
               <td style="padding-left:28px;">
-                <strong>4.<?= $sno ?> <?= h($sp['sport_name']) ?></strong>
+                <strong><?= h($cat_num) ?>.<?= $sno ?> <?= h($sp['sport_name']) ?></strong>
                 <div style="font-size:0.75rem; color:var(--muted);"><?= h($sp['manager_unit']) ?></div>
               </td>
               <td>

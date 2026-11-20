@@ -100,7 +100,7 @@ require_once __DIR__ . '/includes/header.php';
           $grand_sport_total += $sub_total;
         ?>
         <tr>
-          <td>4.<?= (int)$sp['sport_no'] ?></td>
+          <td><?= (int)$sp['sport_no'] ?></td>
           <td>
             <a href="athletes.php?sport_id=<?= $id ?>" style="font-weight:800; color:var(--green-dark);">
               <?= h($sp['sport_name']) ?>

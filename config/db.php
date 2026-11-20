@@ -2,6 +2,23 @@
 /**
  * Database Connection Configuration (Supports both Docker env & Windows IIS Server)
  */
+$env_file = dirname(__DIR__) . DIRECTORY_SEPARATOR . '.env';
+if (is_readable($env_file)) {
+    foreach (file($env_file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+        $line = trim($line);
+        if ($line === '' || $line[0] === '#' || strpos($line, '=') === false) {
+            continue;
+        }
+        [$k, $v] = array_map('trim', explode('=', $line, 2));
+        if ($k !== '' && getenv($k) === false) {
+            if (strlen($v) >= 2 && (($v[0] === '"' && $v[-1] === '"') || ($v[0] === "'" && $v[-1] === "'"))) {
+                $v = substr($v, 1, -1);
+            }
+            putenv("{$k}={$v}");
+        }
+    }
+}
+
 $db_host = getenv('DB_HOST') ?: '127.0.0.1';
 $db_port = getenv('DB_PORT') ?: '3306';
 $db_name = getenv('DB_NAME') ?: 'green_sport_2027';

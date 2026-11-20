@@ -10,6 +10,7 @@ USE green_sport_2027;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS disbursements;
+DROP TABLE IF EXISTS sport_medical_requests;
 DROP TABLE IF EXISTS medical_items;
 DROP TABLE IF EXISTS match_schedules;
 DROP TABLE IF EXISTS sport_members;
@@ -117,6 +118,9 @@ CREATE TABLE sports (
     match_days INT NOT NULL DEFAULT 3,
     match_cost_per_day DECIMAL(10,2) NOT NULL DEFAULT 300.00,
     extra_consumables_cost DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    alloc_tranche_1 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    alloc_tranche_2 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    alloc_tranche_3 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
     sponsor_bottles_per_match INT NOT NULL DEFAULT 15,
     cooling_spray_quota INT NOT NULL DEFAULT 1,
     medical_risk ENUM('LOW', 'MEDIUM', 'HIGH') DEFAULT 'MEDIUM',

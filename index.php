@@ -35,7 +35,7 @@ $grand_realistic = $t1_realistic + $t2_realistic + $t3_realistic;
 // คำนวณยอดจัดสรรแล้วและยอดคงเหลือของแต่ละก้อน
 $sum1 = 0; $sum2 = 0; $sum3 = 0;
 foreach ($categories as $cat) {
-    if ((int)$cat['id'] === 4) {
+    if (($cat['category_code'] ?? '') === 'CAT_SPORTS') {
         $sum1 += $sport_sum_t1;
         $sum2 += $sport_sum_t2;
         $sum3 += $sport_sum_t3;
@@ -89,7 +89,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="white-shell">
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
     <div>
-      <h2 style="font-size:1.2rem; font-weight:800;">รายงานการจัดสรรงบประมาณประจำสีเขียวทั้ง 3 ก้อน (แยกตามฝ่ายงาน 1–6 และชนิดกีฬา 4.1–4.11)</h2>
+      <h2 style="font-size:1.2rem; font-weight:800;">รายงานการจัดสรรงบประมาณประจำสีเขียวทั้ง 3 ก้อน (แยกตามฝ่ายงาน 1–6 และ 11 ชนิดกีฬา)</h2>
       <p style="font-size:0.84rem; color:var(--muted);">ก้อนที่ 1 งบผู้บริหาร · ก้อนที่ 2 งบ มพ. · ก้อนที่ 3 เงินรายหัวส่วนงาน</p>
     </div>
     <?php if (is_admin_logged_in()): ?>
@@ -118,8 +118,11 @@ require_once __DIR__ . '/includes/header.php';
 
         foreach ($categories as $cat):
           $cid = (int)$cat['id'];
-          if ($cid === 4) {
-              // 4. ฝ่ายประสานงานกีฬา (รวมยอดจาก 4.1 - 4.11)
+          $is_sports_cat = (($cat['category_code'] ?? '') === 'CAT_SPORTS');
+          $is_buffer_cat = (($cat['category_code'] ?? '') === 'CAT_BUFFER');
+          $cat_num = preg_match('/^(\d+)\./', (string)$cat['category_name'], $m) ? $m[1] : $cid;
+          if ($is_sports_cat) {
+              // ฝ่ายประสานงานกีฬา (รวมยอดจาก 11 ชนิดกีฬา)
               $c1 = $sport_sum_t1;
               $c2 = $sport_sum_t2;
               $c3 = $sport_sum_t3;
@@ -132,7 +135,7 @@ require_once __DIR__ . '/includes/header.php';
           $row_tot = $c1 + $c2 + $c3;
           $sum1 += $c1; $sum2 += $c2; $sum3 += $c3;
         ?>
-        <tr style="<?= $cid === 4 ? 'background:#f0fdf4;' : ($cid === 6 ? 'background:#fefce8;' : '') ?>">
+        <tr style="<?= $is_sports_cat ? 'background:#f0fdf4;' : ($is_buffer_cat ? 'background:#fefce8;' : '') ?>">
           <td><strong><?= h($cat['category_name']) ?></strong></td>
           <td>
             <strong><?= h($cat['lead_person']) ?></strong>
@@ -145,8 +148,8 @@ require_once __DIR__ . '/includes/header.php';
           <td style="text-align:right; font-weight:850; color:var(--green-dark);"><?= number_format($row_tot) ?> ฿</td>
         </tr>
 
-        <?php if ($cid === 4): ?>
-          <!-- แสดงรายการย่อย 4.1 ถึง 4.11 ครบทุกชนิดกีฬา -->
+        <?php if ($is_sports_cat): ?>
+          <!-- แสดงรายการย่อยครบทุกชนิดกีฬา (1–11) -->
           <?php foreach ($sports as $sp):
             $sno = (int)$sp['sport_no'];
             $sp1 = (float)$sp['alloc_tranche_1'];
@@ -156,7 +159,7 @@ require_once __DIR__ . '/includes/header.php';
           ?>
           <tr style="background:#fafdfb; font-size:0.84rem;">
             <td style="padding-left:32px; color:var(--green-dark);">
-              <strong>4.<?= $sno ?> <?= h($sp['sport_name']) ?></strong>
+              <strong><?= h($cat_num) ?>.<?= $sno ?> <?= h($sp['sport_name']) ?></strong>
               <span style="color:var(--muted);"> (<?= h($sp['sport_type']) ?>)</span>
             </td>
             <td>
