@@ -17,10 +17,26 @@ try {
         PDO::ATTR_EMULATE_PREPARES   => false,
     ]);
 } catch (PDOException $e) {
+    error_log('[GREEN-SPORT DB ERROR] ' . $e->getMessage());
     http_response_code(500);
-    die("ไม่สามารถเชื่อมต่อฐานข้อมูล MariaDB ได้: " . htmlspecialchars($e->getMessage()));
+    die('ไม่สามารถเชื่อมต่อฐานข้อมูลได้ในขณะนี้ กรุณาติดต่อผู้ดูแลระบบ');
 }
 
 function h($str): string {
     return htmlspecialchars((string)$str, ENT_QUOTES, 'UTF-8');
+}
+
+/**
+ * Mask Thai phone numbers for PDPA compliance on public pages (full number shown for logged-in Admins).
+ */
+function mask_phone($phone, bool $show_full = false): string {
+    $raw = trim((string)$phone);
+    if ($raw === '' || $raw === '-' || $show_full) {
+        return $raw;
+    }
+    $digits = preg_replace('/\D+/', '', $raw);
+    if (strlen($digits) >= 9) {
+        return substr($digits, 0, 3) . '-XXX-' . substr($digits, -4);
+    }
+    return $raw;
 }

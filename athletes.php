@@ -147,7 +147,7 @@ require_once __DIR__ . '/includes/header.php';
       </strong>
       <div style="font-size:0.86rem; font-weight:500; margin-top:2px;">
         ผู้จัดการทีม: <strong><?= h($active_sport_info['manager_name']) ?><?= $active_sport_info['sub_manager_name'] ? ' / ' . h($active_sport_info['sub_manager_name']) : '' ?></strong>
-        (<?= h($active_sport_info['manager_unit']) ?> · โทร. <?= h($active_sport_info['manager_phone']) ?>)
+        (<?= h($active_sport_info['manager_unit']) ?> · โทร. <?= h(mask_phone($active_sport_info['manager_phone'], is_admin_logged_in())) ?>)
         | สนามแข่ง: <strong><?= h($active_sport_info['default_venue']) ?></strong>
       </div>
     </div>
@@ -218,7 +218,7 @@ require_once __DIR__ . '/includes/header.php';
               <?php endif; ?>
             </td>
             <td><?= h($m['unit_name']) ?></td>
-            <td style="font-weight:750; color:var(--green-dark);"><?= h($m['phone']) ?></td>
+            <td style="font-weight:750; color:var(--green-dark);"><?= h(mask_phone($m['phone'], is_admin_logged_in())) ?></td>
             <td><?= h($m['competition_category'] ?: '-') ?></td>
           </tr>
           <?php endforeach; ?>

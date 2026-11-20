@@ -67,7 +67,7 @@ require_once __DIR__ . '/includes/header.php';
           <td><strong><?= h($u['unit_name']) ?></strong></td>
           <td>
             <strong><?= h($u['coordinator_name']) ?></strong>
-            <div style="font-size:0.78rem; color:var(--green-dark);"><?= h($u['coordinator_phone']) ?></div>
+            <div style="font-size:0.78rem; color:var(--green-dark);"><?= h(mask_phone($u['coordinator_phone'], is_admin_logged_in())) ?></div>
           </td>
           <td style="text-align:center;"><?= $staff ?> / <?= $emp ?></td>
           <td style="text-align:right; font-weight:750; color:#6d28d9;"><?= number_format($full_hc) ?> ฿</td>

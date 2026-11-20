@@ -10,6 +10,10 @@ $msg = '';
 // HANDLE POST ACTIONS FROM ADMIN FORMS
 // ============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
+    if (!verify_csrf()) {
+        http_response_code(403);
+        die('คำขอไม่ถูกต้อง (Invalid CSRF Token) กรุณาย้อนกลับและรีเฟรชหน้าเว็บ');
+    }
     $act = $_POST['action'];
 
     // 1. Update 3-Tranche Category & Sports Allocations
@@ -409,6 +413,7 @@ require_once __DIR__ . '/includes/header.php';
 ?>
 <div class="white-shell">
   <form method="post">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_budget_categories" />
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
       <h2 style="font-size:1.2rem; font-weight:800;">⚙️ ตั้งค่าการจัดสรรงบประมาณ 3 ก้อน (ฝ่ายงาน 1–6 และชนิดกีฬา 4.1–4.11)</h2>
@@ -506,6 +511,7 @@ require_once __DIR__ . '/includes/header.php';
 <?php if ($active_tab === 'units'): ?>
 <div class="white-shell" style="margin-bottom:22px;">
   <form method="post">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_units_staff" />
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <div>
@@ -569,6 +575,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="white-shell">
   <form method="post">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_units_payments" />
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <div>
@@ -647,6 +654,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="white-shell">
   <h2 style="font-size:1.2rem; font-weight:800; margin-bottom:12px;">⚙️ เพิ่มโปรแกรมการแข่งขันใหม่</h2>
   <form method="post" class="form-grid">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="add_match" />
     <div class="form-group">
       <label>ชนิดกีฬา</label>
@@ -709,6 +717,7 @@ require_once __DIR__ . '/includes/header.php';
           <td style="text-align:center;"><?= (int)$m['sponsor_bottles_needed'] ?> ขวด</td>
           <td>
             <form method="post" style="margin:0;" onsubmit="return confirm('ลบรายการแข่งขันนี้?');">
+              <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete_match" />
               <input type="hidden" name="match_id" value="<?= (int)$m['id'] ?>" />
               <button type="submit" class="btn-sm btn-danger">ลบ</button>
@@ -729,6 +738,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="white-shell">
   <h2 style="font-size:1.2rem; font-weight:800; margin-bottom:12px;">⚙️ เพิ่มรายชื่อนักกีฬา / ผู้จัดการทีม</h2>
   <form method="post" class="form-grid">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="add_member" />
     <div class="form-group">
       <label>ชนิดกีฬา (1–11)</label>
@@ -798,6 +808,7 @@ require_once __DIR__ . '/includes/header.php';
           <td><?= h($m['phone']) ?></td>
           <td>
             <form method="post" style="margin:0;" onsubmit="return confirm('ลบรายชื่อนี้?');">
+              <?= csrf_field() ?>
               <input type="hidden" name="action" value="delete_member" />
               <input type="hidden" name="sport_id" value="<?= $filter_sport ?>" />
               <input type="hidden" name="member_id" value="<?= (int)$m['id'] ?>" />
@@ -860,6 +871,7 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 
   <form method="post">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_sport_medical" />
     <input type="hidden" name="med_sport_id" value="<?= $med_sport_id ?>" />
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px; background:#ecfdf5; padding:10px 14px; border-radius:10px; border:1px solid #a7f3d0;">
@@ -923,6 +935,7 @@ require_once __DIR__ . '/includes/header.php';
 
 <div class="white-shell">
   <form method="post">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="save_medical" />
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
       <div>
@@ -968,6 +981,7 @@ require_once __DIR__ . '/includes/header.php';
 <div class="white-shell">
   <h2 style="font-size:1.2rem; font-weight:800; margin-bottom:12px;">⚙️ สร้างใบเบิกงบประมาณรายการใหม่</h2>
   <form method="post" class="form-grid">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="create_disbursement" />
     <div class="form-group"><label>วันที่เบิก</label><input type="date" name="tx_date" value="<?= date('Y-m-d') ?>" class="form-control" required /></div>
     <div class="form-group">
@@ -1002,6 +1016,7 @@ require_once __DIR__ . '/includes/header.php';
   </form>
 
   <form method="post">
+    <?= csrf_field() ?>
     <input type="hidden" name="action" value="update_disbursement" />
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
       <h3 style="font-size:1.1rem; font-weight:800;">อัปเดตยอดใช้จริงและสถานะการเคลียร์บิล</h3>

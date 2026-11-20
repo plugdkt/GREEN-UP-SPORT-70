@@ -109,7 +109,7 @@ require_once __DIR__ . '/includes/header.php';
           <td><?= h($sp['sport_type']) ?></td>
           <td>
             <strong><?= h($sp['manager_name']) ?><?= $sp['sub_manager_name'] ? ' / ' . h($sp['sub_manager_name']) : '' ?></strong>
-            <div style="font-size:0.76rem; color:var(--muted);"><?= h($sp['manager_unit']) ?> · <?= h($sp['manager_phone']) ?></div>
+            <div style="font-size:0.76rem; color:var(--muted);"><?= h($sp['manager_unit']) ?> · <?= h(mask_phone($sp['manager_phone'], is_admin_logged_in())) ?></div>
           </td>
           <td><?= h($sp['default_venue']) ?></td>
           <td style="text-align:center;">
