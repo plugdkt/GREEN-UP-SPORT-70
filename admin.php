@@ -150,20 +150,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     // 4. Add Match Schedule
     elseif ($act === 'add_match') {
         $stmt = $pdo->prepare("
-            INSERT INTO match_schedules (sport_id, match_date, start_time, end_time, team_division, opponent_color, venue, round_name, water_ice_budget, sponsor_bottles_needed, medical_bag_code)
-            VALUES (:sport_id, :match_date, :start_time, :end_time, :team_div, :opp, :venue, 'ตามกำหนด', :water_budget, :sponsor, :bag)
+            INSERT INTO match_schedules (sport_id, match_date, start_time, end_time, team_division, opponent_color, venue, round_name)
+            VALUES (:sport_id, :match_date, :start_time, :end_time, :team_div, :opp, :venue, 'ตามกำหนด')
         ");
         $stmt->execute([
-            ':sport_id'     => (int)$_POST['sport_id'],
-            ':match_date'   => $_POST['match_date'],
-            ':start_time'   => $_POST['start_time'],
-            ':end_time'     => $_POST['end_time'] ?: null,
-            ':team_div'     => trim($_POST['team_division']),
-            ':opp'          => trim($_POST['opponent_color']),
-            ':venue'        => trim($_POST['venue']),
-            ':water_budget' => (float)$_POST['water_ice_budget'],
-            ':sponsor'      => (int)$_POST['sponsor_bottles_needed'],
-            ':bag'          => $_POST['medical_bag_code'],
+            ':sport_id'   => (int)$_POST['sport_id'],
+            ':match_date' => $_POST['match_date'],
+            ':start_time' => $_POST['start_time'],
+            ':end_time'   => $_POST['end_time'] ?: null,
+            ':team_div'   => trim($_POST['team_division']),
+            ':opp'        => trim($_POST['opponent_color']),
+            ':venue'      => trim($_POST['venue']),
         ]);
         $active_tab = 'matches';
         $msg = 'เพิ่มโปรแกรมการแข่งขันใหม่เรียบร้อยแล้ว!';
@@ -681,16 +678,6 @@ require_once __DIR__ . '/includes/header.php';
         <option value="สนามเทนนิส มหาวิทยาลัยพะเยา">สนามเทนนิส มหาวิทยาลัยพะเยา</option>
       </select>
     </div>
-    <div class="form-group"><label>งบน้ำ/น้ำแข็งนัดนี้ (฿)</label><input type="number" name="water_ice_budget" value="200" class="form-control" /></div>
-    <div class="form-group"><label>สปอนเซอร์ (ขวด)</label><input type="number" name="sponsor_bottles_needed" value="15" class="form-control" /></div>
-    <div class="form-group">
-      <label>กระเป๋ายา</label>
-      <select name="medical_bag_code" class="form-control">
-        <option value="BAG-01">BAG-01 (อาคารสงวนฯ)</option>
-        <option value="BAG-02">BAG-02 (สนามกีฬากลาง)</option>
-        <option value="BAG-03">BAG-03 (เปตอง/เทนนิส)</option>
-      </select>
-    </div>
     <button type="submit" class="btn-primary">+ เพิ่มตารางแข่ง</button>
   </form>
 
@@ -703,8 +690,6 @@ require_once __DIR__ . '/includes/header.php';
           <th>ชนิดกีฬา</th>
           <th>คู่แข่งขัน / รุ่น</th>
           <th>สนาม</th>
-          <th style="text-align:right;">งบน้ำ</th>
-          <th style="text-align:center;">สปอนเซอร์</th>
           <th>ลบ</th>
         </tr>
       </thead>
@@ -716,8 +701,6 @@ require_once __DIR__ . '/includes/header.php';
           <td><strong><?= h($m['sport_name']) ?></strong></td>
           <td><?= h($m['opponent_color']) ?> (<?= h($m['team_division']) ?>)</td>
           <td><?= h($m['venue']) ?></td>
-          <td style="text-align:right;"><?= number_format((float)$m['water_ice_budget']) ?> ฿</td>
-          <td style="text-align:center;"><?= (int)$m['sponsor_bottles_needed'] ?> ขวด</td>
           <td>
             <form method="post" style="margin:0;" onsubmit="return confirm('ลบรายการแข่งขันนี้?');">
               <?= csrf_field() ?>
