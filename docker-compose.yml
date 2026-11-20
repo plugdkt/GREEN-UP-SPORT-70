@@ -1,0 +1,43 @@
+services:
+  db:
+    image: mariadb:10.11
+    container_name: green_sport_mariadb
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: rootpassword
+      MARIADB_DATABASE: green_sport_2027
+      MARIADB_USER: green_user
+      MARIADB_PASSWORD: green_password
+      TZ: Asia/Bangkok
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    ports:
+      - "3317:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+      - ./database/schema_and_seed.sql:/docker-entrypoint-initdb.d/01_schema_and_seed.sql:ro
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: .
+    container_name: green_sport_php_web
+    restart: unless-stopped
+    ports:
+      - "8087:80"
+    environment:
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: green_sport_2027
+      DB_USER: green_user
+      DB_PASS: green_password
+    volumes:
+      - ./:/var/www/html
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  mariadb_data:

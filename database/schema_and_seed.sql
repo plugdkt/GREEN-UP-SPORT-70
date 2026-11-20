@@ -1,0 +1,308 @@
+-- ============================================================================
+-- ระบบบริหารจัดการงบประมาณและทัพนักกีฬาสีเขียว (GREEN TEAM)
+-- โครงการ UP Sport Day & BMI CHALLENGE 2027 (มหาวิทยาลัยพะเยา)
+-- Database: MariaDB 10.6+ / MySQL 8.0+ (UTF8MB4)
+-- ============================================================================
+
+CREATE DATABASE IF NOT EXISTS green_sport_2027
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE green_sport_2027;
+
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS disbursements;
+DROP TABLE IF EXISTS medical_items;
+DROP TABLE IF EXISTS match_schedules;
+DROP TABLE IF EXISTS sport_members;
+DROP TABLE IF EXISTS sport_unit_coordinators;
+DROP TABLE IF EXISTS sports;
+DROP TABLE IF EXISTS budget_categories;
+DROP TABLE IF EXISTS budget_tranches;
+DROP TABLE IF EXISTS units;
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- ----------------------------------------------------------------------------
+-- 1. ตารางส่วนงานในสังกัดสีเขียว (9 จุดประสานงาน)
+-- ----------------------------------------------------------------------------
+CREATE TABLE units (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    unit_code VARCHAR(20) NOT NULL UNIQUE,
+    unit_name VARCHAR(150) NOT NULL,
+    parent_line VARCHAR(150) NOT NULL,
+    staff_count INT NOT NULL DEFAULT 0 COMMENT 'จำนวนพนักงาน (คนละ 100 บาท)',
+    employee_count INT NOT NULL DEFAULT 0 COMMENT 'จำนวนลูกจ้าง (ยกเว้นรายหัว)',
+    expected_participation_pct DECIMAL(5,2) NOT NULL DEFAULT 70.00 COMMENT '% คาดการณ์ผู้เข้าร่วมจริง',
+    exec_support_pledged DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'งบผู้บริหารแจ้งสนับสนุน (ก้อน 1)',
+    exec_support_received DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'งบผู้บริหารที่ส่งแล้ว',
+    headcount_received DECIMAL(10,2) NOT NULL DEFAULT 0.00 COMMENT 'เงินรายหัว/โครงการคณะที่ส่งแล้ว (ก้อน 3)',
+    coordinator_name VARCHAR(100) NOT NULL,
+    coordinator_phone VARCHAR(50) NOT NULL,
+    payment_due_date DATE DEFAULT '2026-11-30',
+    payment_status ENUM('PENDING', 'PARTIAL', 'PAID') DEFAULT 'PENDING',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+INSERT INTO units (id, unit_code, unit_name, parent_line, staff_count, employee_count, expected_participation_pct, exec_support_pledged, exec_support_received, headcount_received, coordinator_name, coordinator_phone, payment_status) VALUES
+(1, 'EDU_SERV', 'กองบริการการศึกษา (สายรองฯ วิชาการ)', 'สายรองอธิการบดีฝ่ายวิชาการ', 49, 1, 70.00, 15000.00, 0.00, 0.00, 'พี่ปังปอนด์', '081-3860061', 'PENDING'),
+(2, 'LAW_DIV', 'กองกฎหมาย (สายรองฯ กฎหมายและทรัพย์สิน)', 'สายรองอธิการบดีฝ่ายกฎหมายและทรัพย์สิน', 64, 1, 70.00, 15000.00, 0.00, 0.00, 'พี่ยุ้ย', '063-7890333', 'PENDING'),
+(3, 'FIN_DIV', 'กองคลัง (สายรองฯ กฎหมายและทรัพย์สิน)', 'สายรองอธิการบดีฝ่ายกฎหมายและทรัพย์สิน', 0, 0, 70.00, 0.00, 0.00, 0.00, 'พี่โอ๊ต', '089-2619268', 'PENDING'),
+(4, 'ASSET_DIV', 'กองทรัพย์สิน (สายรองฯ กฎหมายและทรัพย์สิน)', 'สายรองอธิการบดีฝ่ายกฎหมายและทรัพย์สิน', 0, 3, 70.00, 0.00, 0.00, 0.00, 'พี่ปุ๊', '084-3634745', 'PENDING'),
+(5, 'SCI_FAC', 'คณะวิทยาศาสตร์', 'คณะวิทยาศาสตร์', 124, 1, 70.00, 10000.00, 0.00, 0.00, 'พี่อ้อม', '086-4280128', 'PENDING'),
+(6, 'MEDSCI_FAC', 'คณะวิทยาศาสตร์การแพทย์', 'คณะวิทยาศาสตร์การแพทย์', 97, 3, 70.00, 10000.00, 0.00, 0.00, 'ปลั๊ก', '081-1616129', 'PENDING'),
+(7, 'ENG_FAC', 'คณะวิศวกรรมศาสตร์', 'คณะวิศวกรรมศาสตร์', 93, 13, 70.00, 10000.00, 0.00, 0.00, 'พี่แอน', '061-7962555', 'PENDING'),
+(8, 'AGRI_FAC', 'คณะเกษตรศาสตร์และทรัพยากรธรรมชาติ', 'คณะเกษตรศาสตร์ฯ', 66, 5, 70.00, 10000.00, 0.00, 0.00, 'พี่เปิ้ล', '091-8525645', 'PENDING'),
+(9, 'ITI_INST', 'สถาบันนวัตกรรมและถ่ายทอดเทคโนโลยี', 'สถาบันนวัตกรรมฯ', 24, 20, 70.00, 10000.00, 0.00, 0.00, 'พี่กอล์ฟ', '088-2734870', 'PENDING');
+
+-- ----------------------------------------------------------------------------
+-- 2. ตารางแหล่งงบประมาณ 3 ก้อน (Budget Tranches)
+-- ----------------------------------------------------------------------------
+CREATE TABLE budget_tranches (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    tranche_no TINYINT NOT NULL UNIQUE,
+    tranche_name VARCHAR(150) NOT NULL,
+    full_amount DECIMAL(10,2) NOT NULL,
+    realistic_amount DECIMAL(10,2) NOT NULL,
+    received_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    usage_condition VARCHAR(255) NOT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO budget_tranches (tranche_no, tranche_name, full_amount, realistic_amount, received_amount, usage_condition) VALUES
+(1, 'ก้อนที่ 1: งบสนับสนุนผู้บริหาร (ภายใน 30 พ.ย. 69)', 80000.00, 80000.00, 0.00, 'ใช้เบิกงวดแรก: มัดจำขบวนพาเหรด/กองเชียร์, น้ำซ้อมกีฬา 11 ชนิด, ซื้อยาและขวดสปอนเซอร์'),
+(2, 'ก้อนที่ 2: เงินสนับสนุนส่วนกลาง มหาวิทยาลัยพะเยา', 50000.00, 50000.00, 0.00, 'ล็อกวัตถุประสงค์: ใช้รายชื่อบุคลากรตั้งเบิกค่าอาหารและเครื่องดื่มเย็นวันปิดสนาม (14 ม.ค. 2570)'),
+(3, 'ก้อนที่ 3: เงินสมทบรายหัว / โครงการซัพพอร์ตส่วนงาน (คิดที่ 70%)', 51700.00, 36200.00, 0.00, 'ใช้เบิกงวดสอง: สมทบวันแข่งจริง 14 ม.ค. 70 และเป็นงบสำรองฉุกเฉินของประธานสี');
+
+-- ----------------------------------------------------------------------------
+-- 3. ตารางหมวดหมู่การใช้เงินและฝ่ายงานหลัก (5 ฝ่ายหลัก + งบสำรอง)
+-- ----------------------------------------------------------------------------
+CREATE TABLE budget_categories (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    category_code VARCHAR(20) NOT NULL UNIQUE,
+    category_name VARCHAR(150) NOT NULL,
+    responsible_unit VARCHAR(150) NOT NULL,
+    lead_person VARCHAR(150) NOT NULL,
+    lead_phone VARCHAR(50) NULL,
+    alloc_tranche_1 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    alloc_tranche_2 DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    alloc_tranche_3_realistic DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    alloc_tranche_3_bonus DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    notes TEXT NULL
+) ENGINE=InnoDB;
+
+INSERT INTO budget_categories (id, category_code, category_name, responsible_unit, lead_person, lead_phone, alloc_tranche_1, alloc_tranche_2, alloc_tranche_3_realistic, alloc_tranche_3_bonus, notes) VALUES
+(1, 'CAT_PARADE', '1. ฝ่ายขบวนพาเหรดและเดินขบวน', 'คณะวิศวกรรมศาสตร์', 'พี่แอน', '061-7962555', 20000.00, 0.00, 7000.00, 3000.00, 'งวด 1 ทำป้าย/พร็อพหลัก · งวด 2 วันเดินขบวน'),
+(2, 'CAT_CHEER', '2. ฝ่ายกองเชียร์และสแตนเชียร์', 'คณะเกษตรฯ / สถาบันนวัตกรรมฯ', 'จุฑามาศ / สาธิต', '091-8525645', 15000.00, 0.00, 7000.00, 3000.00, 'งวด 1 ซื้อกลอง/พู่/ซ้อม · งวด 2 แต่งสแตนวันเปิด'),
+(3, 'CAT_SPORTS', '3. ฝ่ายประสานงานกีฬา (11 ชนิดกีฬา)', 'คณะวิทยาศาสตร์ & 11 ผู้จัดการกีฬา', 'ภัทรภรณ์ / ศุภชัย', '086-4280128', 25000.00, 0.00, 8000.00, 2000.00, 'ตัดค่าอุปกรณ์ซ้อม เน้นจ่ายน้ำดื่ม น้ำแข็ง ของว่างซ้อมและวันแข่ง (ยกเว้นลูกแบด/เทนนิส)'),
+(4, 'CAT_MEDICAL', '4. ฝ่ายปฐมพยาบาล ยา และขวดสปอนเซอร์', 'คณะวิทยาศาสตร์การแพทย์', 'ประธานสี & พี่ต่าย', '081-1616129', 10000.00, 0.00, 0.00, 0.00, 'เบิกก้อนแรกจบครบ ซื้อสเปรย์พ่น เทปล็อก กระเป๋ายา และสปอนเซอร์ 260 ขวด'),
+(5, 'CAT_FOOD', '5. ฝ่ายอาหาร เครื่องดื่ม และซุ้มสวัสดิการ', 'กองคลัง / กม. / ทรัพย์สิน / บริการฯ', 'พี่โอ๊ต (กองคลัง)', '089-2619268', 10000.00, 50000.00, 8000.00, 2000.00, 'ก้อน 2 (50,000) ใช้รายชื่อบุคลากรเบิกค่าอาหารเย็น 14 ม.ค. 70'),
+(6, 'CAT_BUFFER', '6. งบสำรองฉุกเฉิน (Contingency Buffer)', 'ประธานสีเขียว & เหรัญญิก', 'คณบดีวิทย์แพทย์ฯ / พี่โอ๊ต', '089-2619268', 0.00, 0.00, 6200.00, 5500.00, 'สำรองหน้างาน และรองรับกรณีเก็บรายหัวไม่ครบ 100%');
+
+-- ----------------------------------------------------------------------------
+-- 4. ตารางชนิดกีฬาทั้ง 11 ชนิด และการคำนวณงบตามนัดแข่งขัน
+-- ----------------------------------------------------------------------------
+CREATE TABLE sports (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sport_no INT NOT NULL UNIQUE,
+    sport_name VARCHAR(100) NOT NULL,
+    sport_type VARCHAR(100) NOT NULL,
+    default_venue VARCHAR(150) NOT NULL,
+    manager_unit_id INT NULL,
+    manager_unit VARCHAR(150) NOT NULL,
+    manager_name VARCHAR(150) NOT NULL,
+    manager_phone VARCHAR(50) NULL,
+    sub_manager_name VARCHAR(150) NULL,
+    sub_manager_phone VARCHAR(50) NULL,
+    target_athletes INT NOT NULL DEFAULT 15,
+    registered_athletes INT NOT NULL DEFAULT 0,
+    practice_days INT NOT NULL DEFAULT 3,
+    practice_cost_per_day DECIMAL(10,2) NOT NULL DEFAULT 150.00,
+    match_days INT NOT NULL DEFAULT 3,
+    match_cost_per_day DECIMAL(10,2) NOT NULL DEFAULT 300.00,
+    extra_consumables_cost DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    sponsor_bottles_per_match INT NOT NULL DEFAULT 15,
+    cooling_spray_quota INT NOT NULL DEFAULT 1,
+    medical_risk ENUM('LOW', 'MEDIUM', 'HIGH') DEFAULT 'MEDIUM',
+    notes TEXT NULL,
+    FOREIGN KEY (manager_unit_id) REFERENCES units(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+INSERT INTO sports (id, sport_no, sport_name, sport_type, default_venue, manager_unit_id, manager_unit, manager_name, manager_phone, sub_manager_name, target_athletes, practice_days, practice_cost_per_day, match_days, match_cost_per_day, extra_consumables_cost, sponsor_bottles_per_match, cooling_spray_quota, medical_risk, notes) VALUES
+(1, 1, 'ฟุตบอล', 'ชาย (ทีม)', 'สนามกีฬากลาง มพ.', 8, 'คณะเกษตรศาสตร์ฯ', 'พี่หล้า', '091-8525645', 'พี่ต๋อง', 22, 4, 190.00, 4, 400.00, 0.00, 25, 3, 'HIGH', 'เตะพบกันหมด 17, 21, 23 ธ.ค. (18:30-19:30) + ชิง 14 ม.ค. 70 (10:30-12:30)'),
+(2, 2, 'แบดมินตัน', 'หญิง/ชาย (ทีม/เดี่ยว)', 'อาคารสงวนเสริมศรี', 6, 'คณะวิทยาศาสตร์การแพทย์', 'อ.โอน', '081-1616129', NULL, 12, 3, 150.00, 3, 250.00, 2500.00, 15, 2, 'MEDIUM', 'มีค่าลูกขนไก่สำหรับแข่งขัน 2,500 บาท'),
+(3, 3, 'วอลเลย์บอล', 'หญิง/ชาย (2 ทีม)', 'อาคารสงวนเสริมศรี', 8, 'คณะเกษตรศาสตร์ฯ', 'อ.พจน์', '091-8525645', NULL, 24, 4, 190.00, 3, 350.00, 0.00, 25, 2, 'HIGH', 'แข่งพบกันหมด 21, 23, 25 ธ.ค. (17:00-19:00) วันละ 2 ทีม (ชาย+หญิง)'),
+(4, 4, 'กรีฑา', 'ชาย / หญิง', 'สนามกีฬากลาง มพ.', 2, 'กองกฎหมาย', 'คุณซัน', '063-7890333', NULL, 20, 3, 200.00, 2, 500.00, 0.00, 30, 3, 'HIGH', 'เน้นน้ำมันมวยวอร์มกล้ามเนื้อและสเปรย์พ่น'),
+(5, 5, 'แชร์บอล', 'หญิง (ทีม)', 'สนามกีฬากลาง มพ.', 5, 'คณะวิทยาศาสตร์', 'พี่อ้อม', '086-4280128', NULL, 14, 3, 130.00, 4, 200.00, 0.00, 14, 1, 'MEDIUM', 'แข่ง 17, 21, 23 ธ.ค. (17:00-17:30) ก่อนฟุตบอลชาย ใช้จุดน้ำแข็งร่วมกันได้'),
+(6, 6, 'เทนนิส', 'ชาย / หญิง', 'สนามเทนนิส มพ.', 5, 'คณะวิทยาศาสตร์', 'อ.กอ', '086-4280128', NULL, 8, 2, 120.00, 2, 200.00, 900.00, 10, 1, 'MEDIUM', 'มีค่าลูกเทนนิสวันแข่ง 900 บาท'),
+(7, 7, 'บาสเกตบอล', 'ชาย (ทีม)', 'อาคารสงวนเสริมศรี', 9, 'สถาบันนวัตกรรมฯ', 'นายศรัณย์ เหมะ', '088-2734870', NULL, 15, 3, 130.00, 4, 200.00, 0.00, 15, 2, 'HIGH', 'แข่งพบกันหมด 14, 15, 17 ธ.ค. (16:30-17:30) ที่อาคารสงวนเสริมศรี'),
+(8, 8, 'กีฬามหาสนุก', 'ผสม (ทีม)', 'อาคารสงวนเสริมศรี', 1, 'กองบริการการศึกษา / กองทรัพย์สิน', 'ผอ.ปอนด์', '081-3860061', 'ผอ.ปุ๊ (084-3634745)', 30, 1, 300.00, 1, 600.00, 0.00, 20, 1, 'LOW', 'เน้นน้ำดื่มดูแลผู้เล่นจำนวนมากในวันแข่ง'),
+(9, 9, 'เปตอง', 'หญิง / ชาย (ทีม)', 'สนามเปตอง มพ.', 7, 'คณะวิศวกรรมศาสตร์', 'อ.ท๊อป', '061-7962555', NULL, 12, 3, 150.00, 2, 300.00, 0.00, 15, 0, 'LOW', 'แข่งกลางแจ้ง เน้นน้ำดื่มเย็นและยาดม'),
+(10, 10, 'เต้นแอโรบิค', 'ผสม', 'อาคารสงวนเสริมศรี', 3, 'กองคลัง', 'พี่กุ๊ก', '089-2619268', NULL, 15, 5, 150.00, 1, 400.00, 1500.00, 15, 1, 'MEDIUM', 'ค่าพร็อพตกแต่งชุดเต้นแอโรบิค 1,500 บาท'),
+(11, 11, 'E-sport (RoV)', 'ทีม 5v5', 'อาคารสงวนเสริมศรี', 6, 'คณะวิทยาศาสตร์การแพทย์', 'คุณปลั๊ก', '081-1616129', NULL, 10, 2, 150.00, 2, 250.00, 0.00, 10, 0, 'LOW', 'แข่งขัน RoV โหมด 5v5');
+
+-- ----------------------------------------------------------------------------
+-- 5. ตารางทะเบียนรายชื่อนักกีฬาและผู้จัดการทีม (Athletes & Team Staff Roster)
+-- ----------------------------------------------------------------------------
+CREATE TABLE sport_members (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sport_id INT NOT NULL,
+    unit_id INT NOT NULL,
+    member_role ENUM('MANAGER', 'COACH', 'ATHLETE', 'SUB_ATHLETE', 'COORDINATOR') NOT NULL DEFAULT 'ATHLETE',
+    title_prefix VARCHAR(50) NULL,
+    full_name VARCHAR(150) NOT NULL,
+    nickname VARCHAR(60) NULL,
+    gender ENUM('M', 'F', 'OTHER') DEFAULT 'M',
+    personnel_type ENUM('STAFF', 'EMPLOYEE', 'EXECUTIVE') DEFAULT 'STAFF',
+    phone VARCHAR(50) NOT NULL,
+    line_id VARCHAR(100) NULL,
+    competition_category VARCHAR(100) NULL,
+    shirt_size VARCHAR(10) DEFAULT 'L',
+    food_allergy_or_medical VARCHAR(255) NULL,
+    join_parade TINYINT(1) NOT NULL DEFAULT 0,
+    join_cheer TINYINT(1) NOT NULL DEFAULT 0,
+    join_bmi TINYINT(1) NOT NULL DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+    FOREIGN KEY (unit_id) REFERENCES units(id) ON DELETE RESTRICT
+) ENGINE=InnoDB;
+
+-- Seed ผู้จัดการทีมทั้ง 11 ชนิดกีฬาลงในตารางทะเบียนบุคลากรกีฬาตั้งต้น
+INSERT INTO sport_members (sport_id, unit_id, member_role, title_prefix, full_name, nickname, gender, phone, competition_category) VALUES
+(1, 8, 'MANAGER', 'คุณ', 'พี่หล้า (ผู้จัดการทีมฟุตบอล)', 'พี่หล้า', 'M', '091-8525645', 'ฟุตบอลชาย'),
+(1, 8, 'COACH', 'คุณ', 'พี่ต๋อง (ผู้จัดการร่วมฟุตบอล)', 'พี่ต๋อง', 'M', '091-8525645', 'ฟุตบอลชาย'),
+(2, 6, 'MANAGER', 'อ.', 'อ.โอน (ผู้จัดการทีมแบดมินตัน)', 'อ.โอน', 'M', '081-1616129', 'แบดมินตัน ช/ญ'),
+(3, 8, 'MANAGER', 'อ.', 'อ.พจน์ (ผู้จัดการทีมวอลเลย์บอล)', 'อ.พจน์', 'M', '091-8525645', 'วอลเลย์บอล ช/ญ'),
+(4, 2, 'MANAGER', 'คุณ', 'ซัน (ผู้จัดการทีมกรีฑา)', 'ซัน', 'M', '063-7890333', 'กรีฑา'),
+(5, 5, 'MANAGER', 'คุณ', 'พี่อ้อม (ผู้จัดการทีมแชร์บอลหญิง)', 'พี่อ้อม', 'F', '086-4280128', 'แชร์บอลหญิง'),
+(6, 5, 'MANAGER', 'อ.', 'อ.กอ (ผู้จัดการทีมเทนนิส)', 'อ.กอ', 'M', '086-4280128', 'เทนนิส'),
+(7, 9, 'MANAGER', 'นาย', 'ศรัณย์ เหมะ', 'ศรัณย์', 'M', '088-2734870', 'บาสเกตบอลชาย (ผู้จัดการทีม & นักกีฬา)'),
+(7, 9, 'ATHLETE', 'นาย', 'สาธิต จีนะสอน', 'สาธิต', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 5, 'ATHLETE', 'ดร.', 'สืบกุล กาญจนสุกร์', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 7, 'ATHLETE', 'ผศ.ดร.', 'อภิชาต บัวกล้า', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 7, 'ATHLETE', 'ผศ.ดร.', 'ธเนศ ทองเดชศรี', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 7, 'ATHLETE', 'อาจารย์', 'ฤทธิ์ทยุต ก้อนทอง', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 7, 'ATHLETE', 'นาย', 'ณัฐพล ปานต๊ะระษี', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'รศ.ดร.', 'พยุงศักดิ์ ตันติไพบูลย์วงศ์', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'ผศ.ดร.', 'ธีรภัทร ศรีรัตนโชติ', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'นาย', 'นฤพงศ์ สันทราย', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'นาย', 'วิทยา สุนสะดี', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'นาย', 'ปฎิพล บุญตัน', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'นาย', 'อภิรักษ์ กาตาสาย', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 6, 'ATHLETE', 'นาย', 'สุวัฒน์ คำลือ', '', 'M', '-', 'บาสเกตบอลชาย'),
+(7, 5, 'ATHLETE', 'นาย', 'วิศิษฐ์ มั่งทัศน์', '', 'M', '-', 'บาสเกตบอลชาย'),
+(8, 1, 'MANAGER', 'ผอ.', 'ผอ.ปอนด์ (ผู้จัดการกีฬามหาสนุก)', 'พี่ปังปอนด์', 'F', '081-3860061', 'กีฬามหาสนุก'),
+(8, 4, 'COACH', 'ผอ.', 'ผอ.ปุ๊ (ผู้จัดการร่วมกีฬามหาสนุก)', 'พี่ปุ๊', 'F', '084-3634745', 'กีฬามหาสนุก'),
+(9, 7, 'MANAGER', 'อ.', 'อ.ท๊อป (ผู้จัดการทีมเปตอง)', 'อ.ท๊อป', 'M', '061-7962555', 'เปตอง ช/ญ'),
+(10, 3, 'MANAGER', 'คุณ', 'พี่กุ๊ก (ผู้จัดการทีมเต้นแอโรบิค)', 'พี่กุ๊ก', 'F', '089-2619268', 'เต้นแอโรบิค'),
+(11, 6, 'MANAGER', 'คุณ', 'ปลั๊ก (ผู้จัดการทีม E-sport RoV)', 'ปลั๊ก', 'M', '081-1616129', 'RoV 5v5');
+
+-- ----------------------------------------------------------------------------
+-- 6. ตารางโปรแกรมการแข่งขันจริง (Match Schedules)
+-- ----------------------------------------------------------------------------
+CREATE TABLE match_schedules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sport_id INT NOT NULL,
+    match_date DATE NOT NULL,
+    start_time TIME NOT NULL,
+    end_time TIME NULL,
+    team_division VARCHAR(100) NULL,
+    opponent_color VARCHAR(100) DEFAULT 'รอประกาศคู่แข่ง',
+    venue VARCHAR(150) NOT NULL,
+    round_name VARCHAR(100) DEFAULT 'รอบพบกันหมด',
+    water_ice_budget DECIMAL(10,2) DEFAULT 200.00,
+    sponsor_bottles_needed INT DEFAULT 15,
+    medical_bag_code VARCHAR(20) DEFAULT 'BAG-01',
+    match_status ENUM('SCHEDULED', 'COMPLETED', 'POSTPONED') DEFAULT 'SCHEDULED',
+    match_result VARCHAR(100) NULL,
+    FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+INSERT INTO match_schedules (sport_id, match_date, start_time, end_time, team_division, opponent_color, venue, round_name, water_ice_budget, sponsor_bottles_needed, medical_bag_code) VALUES
+-- บาสเกตบอล (14, 15, 17 ธ.ค. 69)
+(7, '2026-12-14', '16:30:00', '17:30:00', 'บาสเกตบอลชาย', 'รอประกาศคู่แข่ง (นัดที่ 1)', 'อาคารสงวนเสริมศรี', 'พบกันหมด นัด 1', 200.00, 15, 'BAG-01'),
+(7, '2026-12-15', '16:30:00', '17:30:00', 'บาสเกตบอลชาย', 'รอประกาศคู่แข่ง (นัดที่ 2)', 'อาคารสงวนเสริมศรี', 'พบกันหมด นัด 2', 200.00, 15, 'BAG-01'),
+(7, '2026-12-17', '16:30:00', '17:30:00', 'บาสเกตบอลชาย', 'รอประกาศคู่แข่ง (นัดที่ 3)', 'อาคารสงวนเสริมศรี', 'พบกันหมด นัด 3', 200.00, 15, 'BAG-01'),
+-- แชร์บอลหญิง (17, 21, 23 ธ.ค. 69)
+(5, '2026-12-17', '17:00:00', '17:30:00', 'แชร์บอลหญิง', 'สีฟ้า – สีเขียว', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'พบกันหมด นัด 1', 200.00, 14, 'BAG-02'),
+(5, '2026-12-21', '17:00:00', '17:30:00', 'แชร์บอลหญิง', 'สีชมพู – สีเขียว', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'พบกันหมด นัด 2', 200.00, 14, 'BAG-02'),
+(5, '2026-12-23', '17:00:00', '17:30:00', 'แชร์บอลหญิง', 'สีเขียว – สีเหลือง', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'พบกันหมด นัด 3', 200.00, 14, 'BAG-02'),
+-- ฟุตบอลชาย (17, 21, 23 ธ.ค. 69 + 14 ม.ค. 70)
+(1, '2026-12-17', '18:30:00', '19:30:00', 'ฟุตบอลชาย', 'สีฟ้า – สีเขียว', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'พบกันหมด นัด 1', 400.00, 25, 'BAG-02'),
+(1, '2026-12-21', '18:30:00', '19:30:00', 'ฟุตบอลชาย', 'สีชมพู – สีเขียว', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'พบกันหมด นัด 2', 400.00, 25, 'BAG-02'),
+(1, '2026-12-23', '18:30:00', '19:30:00', 'ฟุตบอลชาย', 'สีเขียว – สีเหลือง', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'พบกันหมด นัด 3', 400.00, 25, 'BAG-02'),
+(1, '2027-01-14', '10:30:00', '12:30:00', 'ฟุตบอลชาย', 'รอบชิงชนะเลิศ / ชิงอันดับ 3', 'สนามกีฬากลางมหาวิทยาลัยพะเยา', 'รอบชิงชนะเลิศ', 400.00, 25, 'BAG-02'),
+-- วอลเลย์บอล ชาย & หญิง (21, 23, 25 ธ.ค. 69)
+(3, '2026-12-21', '17:00:00', '19:00:00', 'ทีมหญิง & ทีมชาย (2 ทีม)', 'รอประกาศคู่แข่ง (นัดที่ 1)', 'อาคารสงวนเสริมศรี', 'พบกันหมด วันแรก', 350.00, 25, 'BAG-01'),
+(3, '2026-12-23', '17:00:00', '19:00:00', 'ทีมหญิง & ทีมชาย (2 ทีม)', 'รอประกาศคู่แข่ง (นัดที่ 2)', 'อาคารสงวนเสริมศรี', 'พบกันหมด วันที่ 2', 350.00, 25, 'BAG-01'),
+(3, '2026-12-25', '17:00:00', '19:00:00', 'ทีมหญิง & ทีมชาย (2 ทีม)', 'รอประกาศคู่แข่ง (นัดที่ 3)', 'อาคารสงวนเสริมศรี', 'พบกันหมด วันที่ 3', 350.00, 25, 'BAG-01');
+
+-- ----------------------------------------------------------------------------
+-- 7. ตารางคลังยา เวชภัณฑ์ และขวดสปอนเซอร์ (Medical & Sponsor Inventory)
+-- ----------------------------------------------------------------------------
+CREATE TABLE medical_items (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    item_code VARCHAR(20) NOT NULL UNIQUE,
+    category_name VARCHAR(100) NOT NULL,
+    item_name VARCHAR(150) NOT NULL,
+    unit_name VARCHAR(50) NOT NULL,
+    total_required INT NOT NULL DEFAULT 0,
+    in_stock_or_borrowed INT NOT NULL DEFAULT 0,
+    unit_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    assigned_bag VARCHAR(100) NULL
+) ENGINE=InnoDB;
+
+CREATE TABLE IF NOT EXISTS sport_medical_requests (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    sport_id INT NOT NULL,
+    medical_item_id INT NOT NULL,
+    qty INT NOT NULL DEFAULT 0,
+    UNIQUE KEY uk_sport_med (sport_id, medical_item_id),
+    FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE CASCADE,
+    FOREIGN KEY (medical_item_id) REFERENCES medical_items(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+INSERT INTO medical_items (item_code, category_name, item_name, unit_name, total_required, in_stock_or_borrowed, unit_price, assigned_bag) VALUES
+('M01', '1. กล้ามเนื้อ/ตะคริว', 'สเปรย์พ่นลดปวด (Cooling Spray) — PERSKINDOL COOL SPRAY 250ml ฟ้า', 'กระป๋อง', 0, 0, 295.00, ''),
+('M02', '1. กล้ามเนื้อ/ตะคริว', 'ครีมทาคลายกล้ามเนื้อ — COUNTERPAIN COOL 30g ฟ้า', 'หลอด', 0, 0, 75.00, ''),
+('M03', '1. กล้ามเนื้อ/ตะคริว', 'ครีมทาคลายกล้ามเนื้อ — Counterpain hot 30g', 'หลอด', 0, 0, 75.00, ''),
+('M04', '1. กล้ามเนื้อ/ตะคริว', 'น้ำมันมวย 120ml ใหญ่', 'ขวด', 0, 0, 140.00, ''),
+('M05', '2. พยุงข้อ/พันเคล็ด', 'ผ้ายืดพันเคล็ด size 2 นิ้ว — Elastic Bandage LONGMED', 'ม้วน', 0, 0, 30.00, ''),
+('M06', '2. พยุงข้อ/พันเคล็ด', 'ผ้ายืดพันเคล็ด size 3 นิ้ว — Elastic Bandage LONGMED', 'ม้วน', 0, 0, 45.00, ''),
+('M07', '2. พยุงข้อ/พันเคล็ด', 'ผ้ายืดพันเคล็ด size 4 นิ้ว — Elastic Bandage LONGMED', 'ม้วน', 0, 0, 60.00, ''),
+('M08', '2. พยุงข้อ/พันเคล็ด', 'เทปล็อก (Sports Strapping Tape) size 1 นิ้ว — RHINOTAPE 1นิ้วx10หลา', 'ม้วน', 0, 0, 60.00, ''),
+('M09', '2. พยุงข้อ/พันเคล็ด', 'เทปล็อก (Sports Strapping Tape) size 2 นิ้ว — RHINOTAPE 2นิ้วx10หลา', 'ม้วน', 0, 0, 105.00, ''),
+('M10', '2. พยุงข้อ/พันเคล็ด', 'เจลประคบเย็น — LONGMED COLD HOT PAD ใหญ่ (25x10 cm.)', 'ชิ้น', 0, 0, 130.00, ''),
+('M11', '3. แก้เป็นลม/อ่อนเพลีย', 'แอมโมเนียหอม — แอมโมเนีย วิทยาศรม 15 ml', 'ขวด', 0, 0, 20.00, ''),
+('M12', '3. แก้เป็นลม/อ่อนเพลีย', 'ยาหม่องน้ำ — พิมเสนโป๊ยเซียน ขวดแก้วแบน 3cc', 'ขวด', 0, 0, 26.00, ''),
+('M13', '4. ทำแผลสด', 'น้ำเกลือ — น้ำเกลือ Klean&Klear 100 ml', 'ขวด', 0, 0, 38.00, ''),
+('M14', '4. ทำแผลสด', 'พลาสเตอร์ — Neoplast-s ผ้ายืดสีน้ำตาล กล่อง 100 ชิ้น', 'กล่อง', 0, 0, 100.00, ''),
+('M15', '4. ทำแผลสด', 'ก๊อซ — ก๊อซรถพยาบาล 4x4 นิ้ว ห่อ 8 ชิ้น', 'ห่อ', 0, 0, 20.00, ''),
+('M16', '4. ทำแผลสด', 'เบตาดีน (Povidone Iodine) — Betamed 15 ml', 'ขวด', 0, 0, 25.00, ''),
+('M17', '5. ยาสามัญประจำกระเป๋า', 'พาราเซตามอล 500 mg — Tylenol แผง 10 เม็ด', 'แผง', 0, 0, 18.00, ''),
+('M18', '5. ยาสามัญประจำกระเป๋า', 'ยาแก้แพ้ (Chlorpheniramine) — BL.HUA แผง 10 เม็ด', 'แผง', 0, 0, 15.00, ''),
+('M19', '5. ยาสามัญประจำกระเป๋า', 'ยาลดกรด — กระต่ายบิน ขนาด 200 ml', 'ขวด', 0, 0, 72.00, ''),
+('M20', '4. ทำแผลสด', 'ไม้สำลีก้าน size M — SOFTIP Longmed 100 ก้าน', 'ห่อ/กระปุก', 0, 0, 45.00, ''),
+('M21', '6. เครื่องดื่มเกลือแร่', 'สปอนเซอร์ ออริจินัล 250 ml (ยกลัง 24 ขวด = 252 ฿ / ขวดละ 10.50 ฿)', 'ขวด', 0, 0, 10.50, ''),
+('M22', '6. เครื่องดื่ม/น้ำดื่ม', 'น้ำดื่ม ARO 600 ml แพ็ค 12+3 (15 ขวด/แพ็ค · เรท 7+ แพ็ค)', 'แพ็ค (15 ขวด)', 0, 0, 46.00, ''),
+('M23', '6. เครื่องดื่ม/น้ำดื่ม', 'C-VITT Vitamin C 140 ml (ยกลัง 30 ขวด = 400 ฿ / ขวดละ 13.33 ฿)', 'ลัง (30 ขวด)', 0, 0, 400.00, ''),
+('M24', '6. เครื่องดื่ม/น้ำดื่ม', 'น้ำอัดลม FANTA 245 ml (แพ็ค 12 ขวด = 110 ฿ / ขวดละ 9.17 ฿)', 'แพ็ค (12 ขวด)', 0, 0, 110.00, '');
+
+-- ----------------------------------------------------------------------------
+-- 8. ตารางรายการเบิกจ่ายและเคลียร์บิล (Disbursements)
+-- ----------------------------------------------------------------------------
+CREATE TABLE disbursements (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    doc_no VARCHAR(30) NOT NULL UNIQUE,
+    tx_date DATE NOT NULL,
+    tranche_no TINYINT NOT NULL DEFAULT 1,
+    category_id INT NOT NULL,
+    sport_id INT NULL,
+    requester_name VARCHAR(150) NOT NULL,
+    description VARCHAR(255) NOT NULL,
+    requested_amount DECIMAL(10,2) NOT NULL,
+    actual_spent_amount DECIMAL(10,2) DEFAULT 0.00,
+    returned_amount DECIMAL(10,2) DEFAULT 0.00,
+    tx_status ENUM('PENDING', 'APPROVED', 'PAID', 'CLEARED') DEFAULT 'PENDING',
+    approved_by VARCHAR(150) DEFAULT 'ประธานสีเขียว',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (category_id) REFERENCES budget_categories(id),
+    FOREIGN KEY (sport_id) REFERENCES sports(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
