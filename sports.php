@@ -113,7 +113,7 @@ require_once __DIR__ . '/includes/header.php';
           </td>
           <td><?= h($sp['default_venue']) ?></td>
           <td style="text-align:center;">
-            <a href="athletes.php?sport_id=<?= $id ?>" class="status-pill info"><?= (int)$sp['member_count'] ?> / <?= (int)$sp['target_athletes'] ?> คน</a>
+            <a href="athletes.php?sport_id=<?= $id ?>" class="status-pill info"><?= (int)$sp['member_count'] ?> คน</a>
           </td>
           <td style="text-align:right; font-weight:850; font-size:0.98rem; color:var(--green-dark);">
             <?= number_format($sub_total) ?> ฿

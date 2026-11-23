@@ -10,24 +10,64 @@ if (isset($_GET['added']) && $_GET['added'] === '1') {
     $reg_ok = 'ลงทะเบียนเพิ่มรายชื่อนักกีฬาเรียบร้อยแล้ว!';
 }
 
+$reg_passcode = trim((string)(getenv('REG_PASSCODE') !== false ? getenv('REG_PASSCODE') : 'GREEN70'));
+
+// ============================================================================
+// IP-BASED RATE LIMITER FOR PUBLIC ATHLETE REGISTRATION
+// ponytail: single-server temp-file limiter; upgrade to Redis if scaled across multiple web nodes
+// ============================================================================
+function _ath_reg_rate_file(): string {
+    $ip = $_SERVER['REMOTE_ADDR'] ?? 'unknown';
+    return rtrim(sys_get_temp_dir(), '/\\') . DIRECTORY_SEPARATOR . 'green_sport_reg_' . hash('sha256', $ip) . '.json';
+}
+
+function ath_reg_rate_check_and_hit(bool $record_hit = false): bool {
+    $file = _ath_reg_rate_file();
+    $now = time();
+    $window = 600; // 10 minutes
+    $max_attempts = 20;
+    $attempts = [];
+
+    if (file_exists($file)) {
+        $data = json_decode((string)@file_get_contents($file), true);
+        if (is_array($data)) {
+            $attempts = array_values(array_filter($data, function ($t) use ($now, $window) {
+                return is_int($t) && ($now - $t) < $window;
+            }));
+        }
+    }
+
+    if (count($attempts) >= $max_attempts) {
+        return true; // rate-limited
+    }
+
+    if ($record_hit) {
+        $attempts[] = $now;
+        @file_put_contents($file, json_encode($attempts), LOCK_EX);
+    }
+    return false;
+}
+
 // ============================================================================
 // HANDLE PUBLIC / COORDINATOR ATHLETE REGISTRATION POST
 // ============================================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'register_athlete') {
+    $is_admin_post = is_admin_logged_in();
+
     if (!verify_csrf()) {
         $reg_error = 'คำขอไม่ถูกต้อง (CSRF Token หมดอายุ) กรุณารีเฟรชหน้าแล้วลองใหม่อีกครั้ง';
+    } elseif (!$is_admin_post && trim((string)($_POST['website_url'] ?? '')) !== '') {
+        // Honeypot tripped by automated bot
+        ath_reg_rate_check_and_hit(true);
+        usleep(300000);
+        $reg_error = 'ไม่สามารถทำรายการได้ กรุณาลองใหม่อีกครั้ง';
+    } elseif (!$is_admin_post && ath_reg_rate_check_and_hit(false)) {
+        $reg_error = 'ส่งข้อมูลถี่เกินกำหนด กรุณารอสักครู่ (ประมาณ 10 นาที) แล้วลองใหม่อีกครั้ง';
+    } elseif (!$is_admin_post && $reg_passcode !== '' && !hash_equals(strtoupper($reg_passcode), strtoupper(trim((string)($_POST['reg_passcode'] ?? ''))))) {
+        ath_reg_rate_check_and_hit(true);
+        usleep(300000);
+        $reg_error = 'รหัสลงทะเบียนสีเขียวไม่ถูกต้อง กรุณาสอบถามรหัสจากกลุ่ม LINE หรือผู้ประสานงานสีเขียว';
     } else {
-        // Basic anti-spam rate limit for non-admin users (max 20 submissions / 10 min per session)
-        $now = time();
-        if (!is_admin_logged_in()) {
-            $hist = array_values(array_filter($_SESSION['ath_reg_times'] ?? [], function ($t) use ($now) {
-                return ($now - $t) < 600;
-            }));
-            if (count($hist) >= 20) {
-                $reg_error = 'ส่งข้อมูลถี่เกินกำหนด กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
-            }
-        }
-
         if ($reg_error === '') {
             $sport_id  = (int)($_POST['sport_id'] ?? 0);
             $unit_id   = (int)($_POST['unit_id'] ?? 0);
@@ -73,9 +113,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
                             ':phone'     => $phone,
                             ':cat'       => $category,
                         ]);
-                        if (!is_admin_logged_in()) {
-                            $hist[] = $now;
-                            $_SESSION['ath_reg_times'] = $hist;
+                        if (!$is_admin_post) {
+                            ath_reg_rate_check_and_hit(true);
                         }
                         header("Location: athletes.php?sport_id={$sport_id}&added=1");
                         exit;
@@ -215,7 +254,7 @@ require_once __DIR__ . '/includes/header.php';
   ?>
     <a href="athletes.php?sport_id=<?= $sid ?>" class="sport-tab-pill <?= $is_active ? 'active' : '' ?>">
       <span><?= $ico ?> <?= $sno ?>. <?= h($sp['sport_name']) ?></span>
-      <span class="sport-tab-count"><?= (int)$sp['member_count'] ?>/<?= (int)$sp['target_athletes'] ?></span>
+      <span class="sport-tab-count"><?= (int)$sp['member_count'] ?> คน</span>
     </a>
   <?php endforeach; ?>
 </div>
@@ -234,7 +273,7 @@ require_once __DIR__ . '/includes/header.php';
       </div>
     </div>
     <span class="status-pill" style="font-size:0.88rem; padding:6px 14px;">
-      ขึ้นทะเบียนแล้ว <?= (int)$active_sport_info['member_count'] ?> / เป้าหมาย <?= (int)$active_sport_info['target_athletes'] ?> คน
+      ขึ้นทะเบียนแล้ว <?= (int)$active_sport_info['member_count'] ?> คน
     </span>
   </div>
 <?php endif; ?>
@@ -291,6 +330,10 @@ require_once __DIR__ . '/includes/header.php';
     <form method="post" class="form-grid" style="margin-bottom:0;">
       <?= csrf_field() ?>
       <input type="hidden" name="action" value="register_athlete" />
+      <div style="position:absolute; left:-9999px; opacity:0; height:0; width:0; overflow:hidden;" aria-hidden="true">
+        <label>Website</label>
+        <input type="text" name="website_url" value="" tabindex="-1" autocomplete="off" />
+      </div>
       <div class="form-group">
         <label>ชนิดกีฬา (1–11) *</label>
         <select name="sport_id" class="form-control" required>
@@ -338,6 +381,12 @@ require_once __DIR__ . '/includes/header.php';
         <label>ประเภท / ตำแหน่ง / IGN (ถ้ามี)</label>
         <input type="text" name="competition_category" placeholder="เช่น ทีมผสม / คู่ชาย / IGN: ..." value="<?= h($_POST['competition_category'] ?? '') ?>" class="form-control" />
       </div>
+      <?php if (!is_admin_logged_in() && $reg_passcode !== ''): ?>
+      <div class="form-group">
+        <label>🔑 รหัสลงทะเบียนสีเขียว *</label>
+        <input type="text" name="reg_passcode" placeholder="สอบถามจากกลุ่ม LINE / ผู้ประสานงานสีเขียว" autocomplete="off" class="form-control" required />
+      </div>
+      <?php endif; ?>
       <div class="form-group" style="display:flex; align-items:flex-end;">
         <button type="submit" class="btn-primary" style="width:100%;">💾 บันทึกรายชื่อนักกีฬา</button>
       </div>

@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
 
-$med_items = $pdo->query("SELECT * FROM medical_items ORDER BY item_code ASC")->fetchAll();
+// ซ่อนรายการเครื่องดื่ม M21-M24 ชั่วคราวในหน้ารายงานเวชภัณฑ์ (ข้อมูลใน DB ยังคงอยู่ครบ)
+$hidden_drink_codes = "'M21','M22','M23','M24'";
+$med_items = $pdo->query("SELECT * FROM medical_items WHERE item_code NOT IN ({$hidden_drink_codes}) ORDER BY item_code ASC")->fetchAll();
 $sports    = $pdo->query("SELECT * FROM sports ORDER BY sport_no ASC")->fetchAll();
 $filter_sport_id = isset($_GET['sport_id']) ? (int)$_GET['sport_id'] : 0;
 
@@ -12,6 +14,7 @@ $sql_req = "
     JOIN sports s ON s.id = smr.sport_id
     JOIN medical_items mi ON mi.id = smr.medical_item_id
     WHERE smr.qty > 0
+      AND mi.item_code NOT IN ({$hidden_drink_codes})
 ";
 $params_req = [];
 if ($filter_sport_id > 0) {
