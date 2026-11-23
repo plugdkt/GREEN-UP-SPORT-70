@@ -176,32 +176,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
 
     // 6. Add Athlete / Team Manager
     elseif ($act === 'add_member') {
+        $sport_id  = (int)$_POST['sport_id'];
+        $dept_map  = athlete_departments();
+        $dept_name = trim((string)($_POST['department_name'] ?? ''));
+        $unit_id   = isset($dept_map[$dept_name]) ? (int)$dept_map[$dept_name] : (int)($_POST['unit_id'] ?? 1);
+        $cat = trim($_POST['competition_category'] ?? '');
+        if ($sport_id === 4) {
+            $ath_built = build_athletics_category(
+                trim((string)($_POST['athletics_age'] ?? '')),
+                is_array($_POST['athletics_events'] ?? null) ? $_POST['athletics_events'] : []
+            );
+            if ($ath_built !== '') {
+                $cat = $ath_built;
+            }
+        }
         $stmt = $pdo->prepare("
-            INSERT INTO sport_members (sport_id, unit_id, member_role, title_prefix, full_name, nickname, gender, phone, competition_category)
-            VALUES (:sport_id, :unit_id, :role, :prefix, :full_name, :nickname, :gender, :phone, :cat)
+            INSERT INTO sport_members (sport_id, unit_id, department_name, member_role, title_prefix, full_name, nickname, gender, phone, competition_category)
+            VALUES (:sport_id, :unit_id, :dept_name, :role, :prefix, :full_name, :nickname, :gender, :phone, :cat)
         ");
         $stmt->execute([
-            ':sport_id'  => (int)$_POST['sport_id'],
-            ':unit_id'   => (int)$_POST['unit_id'],
+            ':sport_id'  => $sport_id,
+            ':unit_id'   => $unit_id,
+            ':dept_name' => $dept_name !== '' ? $dept_name : null,
             ':role'      => $_POST['member_role'],
             ':prefix'    => trim($_POST['title_prefix']),
             ':full_name' => trim($_POST['full_name']),
             ':nickname'  => trim($_POST['nickname']),
             ':gender'    => $_POST['gender'],
             ':phone'     => trim($_POST['phone']),
-            ':cat'       => trim($_POST['competition_category']),
+            ':cat'       => mb_substr($cat, 0, 255),
         ]);
         $active_tab = 'athletes';
-        $filter_sport = (int)$_POST['sport_id'];
+        $filter_sport = $sport_id;
         $msg = 'เพิ่มรายชื่อนักกีฬา/ผู้จัดการทีมเรียบร้อยแล้ว!';
     }
 
     // 6.2 Edit Athlete / Team Manager
     elseif ($act === 'edit_member') {
+        $sport_id  = (int)$_POST['sport_id'];
+        $dept_map  = athlete_departments();
+        $dept_name = trim((string)($_POST['department_name'] ?? ''));
+        $unit_id   = isset($dept_map[$dept_name]) ? (int)$dept_map[$dept_name] : (int)($_POST['unit_id'] ?? 1);
+        $cat = trim($_POST['competition_category'] ?? '');
+        if ($sport_id === 4) {
+            $ath_built = build_athletics_category(
+                trim((string)($_POST['athletics_age'] ?? '')),
+                is_array($_POST['athletics_events'] ?? null) ? $_POST['athletics_events'] : []
+            );
+            if ($ath_built !== '') {
+                $cat = $ath_built;
+            }
+        }
         $stmt = $pdo->prepare("
             UPDATE sport_members
             SET sport_id             = :sport_id,
                 unit_id              = :unit_id,
+                department_name      = :dept_name,
                 member_role          = :role,
                 title_prefix         = :prefix,
                 full_name            = :full_name,
@@ -212,19 +242,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             WHERE id = :id
         ");
         $stmt->execute([
-            ':sport_id'  => (int)$_POST['sport_id'],
-            ':unit_id'   => (int)$_POST['unit_id'],
+            ':sport_id'  => $sport_id,
+            ':unit_id'   => $unit_id,
+            ':dept_name' => $dept_name !== '' ? $dept_name : null,
             ':role'      => $_POST['member_role'],
             ':prefix'    => trim($_POST['title_prefix']),
             ':full_name' => trim($_POST['full_name']),
             ':nickname'  => trim($_POST['nickname']),
             ':gender'    => $_POST['gender'],
             ':phone'     => trim($_POST['phone']),
-            ':cat'       => trim($_POST['competition_category']),
+            ':cat'       => mb_substr($cat, 0, 255),
             ':id'        => (int)$_POST['member_id'],
         ]);
         $active_tab = 'athletes';
-        $filter_sport = (int)$_POST['sport_id'];
+        $filter_sport = $sport_id;
         $msg = 'บันทึกการแก้ไขข้อมูลนักกีฬา/ผู้จัดการทีมเรียบร้อยแล้ว!';
     }
 
@@ -363,7 +394,8 @@ $tx_list    = $pdo->query("
 ")->fetchAll();
 
 $sql_mem = "
-    SELECT sm.*, s.sport_no, s.sport_name, u.unit_name
+    SELECT sm.*, s.sport_no, s.sport_name,
+           COALESCE(NULLIF(sm.department_name, ''), u.unit_name) AS unit_name
     FROM sport_members sm
     JOIN sports s ON s.id = sm.sport_id
     JOIN units u ON u.id = sm.unit_id
@@ -764,7 +796,7 @@ require_once __DIR__ . '/includes/header.php';
     <input type="hidden" name="action" value="add_member" />
     <div class="form-group">
       <label>ชนิดกีฬา (1–11)</label>
-      <select name="sport_id" class="form-control" required>
+      <select name="sport_id" id="adm_add_sport" class="form-control" onchange="syncAdminAthPicker('adm_add')" required>
         <?php foreach ($sports as $sp): ?>
           <option value="<?= (int)$sp['id'] ?>" <?= $filter_sport === (int)$sp['id'] ? 'selected' : '' ?>><?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?></option>
         <?php endforeach; ?>
@@ -784,15 +816,37 @@ require_once __DIR__ . '/includes/header.php';
     <div class="form-group"><label>ชื่อเล่น</label><input type="text" name="nickname" class="form-control" /></div>
     <div class="form-group">
       <label>สังกัด (ส่วนงาน) *</label>
-      <select name="unit_id" class="form-control" required>
-        <?php foreach ($units as $u): ?>
-          <option value="<?= (int)$u['id'] ?>"><?= h($u['unit_name']) ?></option>
+      <select name="department_name" class="form-control" required>
+        <?php foreach (array_keys(athlete_departments()) as $dname): ?>
+          <option value="<?= h($dname) ?>"><?= h($dname) ?></option>
         <?php endforeach; ?>
       </select>
     </div>
     <div class="form-group"><label>เบอร์ติดต่อ</label><input type="text" name="phone" value="-" class="form-control" required /></div>
     <div class="form-group"><label>เพศ</label><select name="gender" class="form-control"><option value="M">ชาย</option><option value="F">หญิง</option></select></div>
-    <div class="form-group"><label>ประเภท/ตำแหน่ง</label><input type="text" name="competition_category" class="form-control" /></div>
+    <div class="form-group" id="adm_add_cat_grp"><label>ประเภท/ตำแหน่ง</label><input type="text" name="competition_category" class="form-control" /></div>
+    <div id="adm_add_ath_box" style="display:none; grid-column:1 / -1; background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:12px 14px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">
+        <strong style="color:var(--green-dark); font-size:0.9rem;">🏃 เลือกช่วงอายุ &amp; ประเภทการแข่งขันกรีฑา</strong>
+        <select name="athletics_age" id="adm_add_ath_age" class="form-control" style="width:auto; padding:4px 10px;">
+          <option value="">-- เลือกช่วงอายุ --</option>
+          <?php foreach (athletics_age_groups() as $ag): ?>
+            <option value="<?= h($ag) ?>"><?= h($ag) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <?php foreach (athletics_event_groups() as $grp_title => $ev_list): ?>
+        <div style="font-size:0.8rem; font-weight:800; color:var(--green-dark); margin:8px 0 4px;"><?= h($grp_title) ?></div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+          <?php foreach ($ev_list as $ev): ?>
+            <label style="display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; font-size:0.8rem; cursor:pointer;">
+              <input type="checkbox" name="athletics_events[]" value="<?= h($ev) ?>" />
+              <span><?= h($ev) ?></span>
+            </label>
+          <?php endforeach; ?>
+        </div>
+      <?php endforeach; ?>
+    </div>
     <button type="submit" class="btn-primary">+ บันทึกรายชื่อ</button>
   </form>
 
@@ -841,6 +895,7 @@ require_once __DIR__ . '/includes/header.php';
                 data-id="<?= (int)$m['id'] ?>"
                 data-sport="<?= (int)$m['sport_id'] ?>"
                 data-unit="<?= (int)$m['unit_id'] ?>"
+                data-dept="<?= h($m['department_name'] ?: $m['unit_name']) ?>"
                 data-role="<?= h($m['member_role']) ?>"
                 data-prefix="<?= h($m['title_prefix']) ?>"
                 data-fullname="<?= h($m['full_name']) ?>"
@@ -877,7 +932,7 @@ require_once __DIR__ . '/includes/header.php';
         <input type="hidden" name="member_id" id="em_id" value="" />
         <div class="form-group">
           <label>ชนิดกีฬา (1–11) *</label>
-          <select name="sport_id" id="em_sport" class="form-control" required>
+          <select name="sport_id" id="em_sport" class="form-control" onchange="syncAdminAthPicker('em')" required>
             <?php foreach ($sports as $sp): ?>
               <option value="<?= (int)$sp['id'] ?>"><?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?></option>
             <?php endforeach; ?>
@@ -898,9 +953,10 @@ require_once __DIR__ . '/includes/header.php';
         <div class="form-group"><label>ชื่อเล่น</label><input type="text" name="nickname" id="em_nickname" class="form-control" /></div>
         <div class="form-group">
           <label>สังกัด (ส่วนงาน) *</label>
-          <select name="unit_id" id="em_unit" class="form-control" required>
-            <?php foreach ($units as $u): ?>
-              <option value="<?= (int)$u['id'] ?>"><?= h($u['unit_name']) ?></option>
+          <select name="department_name" id="em_dept" class="form-control" required>
+            <option value="">-- เลือกสังกัด (ส่วนงาน) --</option>
+            <?php foreach (array_keys(athlete_departments()) as $dname): ?>
+              <option value="<?= h($dname) ?>"><?= h($dname) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
@@ -912,7 +968,29 @@ require_once __DIR__ . '/includes/header.php';
             <option value="F">หญิง</option>
           </select>
         </div>
-        <div class="form-group"><label>ประเภท/ตำแหน่ง</label><input type="text" name="competition_category" id="em_cat" class="form-control" /></div>
+        <div class="form-group" id="em_cat_grp"><label>ประเภท/ตำแหน่ง</label><input type="text" name="competition_category" id="em_cat" class="form-control" /></div>
+        <div id="em_ath_box" style="display:none; grid-column:1 / -1; background:#f0fdf4; border:1.5px solid #86efac; border-radius:12px; padding:12px 14px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:6px;">
+            <strong style="color:var(--green-dark); font-size:0.9rem;">🏃 เลือกช่วงอายุ &amp; ประเภทการแข่งขันกรีฑา</strong>
+            <select name="athletics_age" id="em_ath_age" class="form-control" style="width:auto; padding:4px 10px;">
+              <option value="">-- เลือกช่วงอายุ --</option>
+              <?php foreach (athletics_age_groups() as $ag): ?>
+                <option value="<?= h($ag) ?>"><?= h($ag) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+          <?php foreach (athletics_event_groups() as $grp_title => $ev_list): ?>
+            <div style="font-size:0.8rem; font-weight:800; color:var(--green-dark); margin:8px 0 4px;"><?= h($grp_title) ?></div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px;">
+              <?php foreach ($ev_list as $ev): ?>
+                <label style="display:inline-flex; align-items:center; gap:5px; padding:4px 9px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; font-size:0.8rem; cursor:pointer;">
+                  <input type="checkbox" class="em-ath-ev" name="athletics_events[]" value="<?= h($ev) ?>" />
+                  <span><?= h($ev) ?></span>
+                </label>
+              <?php endforeach; ?>
+            </div>
+          <?php endforeach; ?>
+        </div>
         <div class="form-group" style="display:flex; gap:8px; align-items:flex-end;">
           <button type="submit" class="btn-primary" style="flex:1;">💾 บันทึกการแก้ไข</button>
           <button type="button" class="btn-sm" style="background:#e2e8f0; color:#0f172a; border:none; padding:9px 14px; cursor:pointer;" onclick="closeEditMemberModal()">ยกเลิก</button>
@@ -922,17 +1000,46 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 
   <script>
+    function syncAdminAthPicker(prefix) {
+      var sel = document.getElementById(prefix + '_sport');
+      if (!sel) return;
+      var isAth = (sel.value === '4');
+      var catGrp = document.getElementById(prefix + '_cat_grp');
+      var athBox = document.getElementById(prefix + '_ath_box');
+      if (catGrp) catGrp.style.display = isAth ? 'none' : '';
+      if (athBox) athBox.style.display = isAth ? 'block' : 'none';
+    }
     function openEditMemberModal(btn) {
       document.getElementById('em_id').value       = btn.getAttribute('data-id') || '';
       document.getElementById('em_sport').value    = btn.getAttribute('data-sport') || '';
-      document.getElementById('em_unit').value     = btn.getAttribute('data-unit') || '';
+      var deptSel = document.getElementById('em_dept');
+      if (deptSel) {
+        deptSel.value = btn.getAttribute('data-dept') || '';
+      }
       document.getElementById('em_role').value     = btn.getAttribute('data-role') || 'ATHLETE';
       document.getElementById('em_prefix').value   = btn.getAttribute('data-prefix') || '';
       document.getElementById('em_fullname').value = btn.getAttribute('data-fullname') || '';
       document.getElementById('em_nickname').value = btn.getAttribute('data-nickname') || '';
       document.getElementById('em_gender').value   = btn.getAttribute('data-gender') || 'M';
       document.getElementById('em_phone').value    = btn.getAttribute('data-phone') || '-';
-      document.getElementById('em_cat').value      = btn.getAttribute('data-cat') || '';
+      var catVal = btn.getAttribute('data-cat') || '';
+      document.getElementById('em_cat').value = catVal;
+
+      // Pre-fill athletics picker if applicable
+      var ageSel = document.getElementById('em_ath_age');
+      var evBoxes = document.querySelectorAll('.em-ath-ev');
+      if (ageSel) ageSel.value = '';
+      evBoxes.forEach(function(cb) { cb.checked = false; });
+      if (document.getElementById('em_sport').value === '4' && catVal.indexOf('|') !== -1) {
+        var parts = catVal.split('|');
+        var ageTxt = parts[0].replace(/^รุ่น\s*/, '').trim();
+        var evList = parts[1].split(',').map(function(s) { return s.trim(); });
+        if (ageSel) ageSel.value = ageTxt;
+        evBoxes.forEach(function(cb) {
+          if (evList.indexOf(cb.value) !== -1) cb.checked = true;
+        });
+      }
+      syncAdminAthPicker('em');
       document.getElementById('editMemberModal').style.display = 'flex';
     }
     function closeEditMemberModal() {
@@ -941,6 +1048,7 @@ require_once __DIR__ . '/includes/header.php';
     document.getElementById('editMemberModal').addEventListener('click', function(e) {
       if (e.target === this) closeEditMemberModal();
     });
+    syncAdminAthPicker('adm_add');
   </script>
 </div>
 <?php endif; ?>

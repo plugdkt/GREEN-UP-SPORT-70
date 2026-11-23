@@ -2,7 +2,11 @@
 require_once __DIR__ . '/config/auth.php';
 
 $filter_sport = isset($_GET['sport_id']) ? (int)$_GET['sport_id'] : (isset($_POST['sport_id']) ? (int)$_POST['sport_id'] : 0);
-$filter_unit  = isset($_GET['unit_id']) ? (int)$_GET['unit_id'] : 0;
+$dept_map     = athlete_departments();
+$filter_dept  = isset($_GET['dept']) ? trim((string)$_GET['dept']) : '';
+if ($filter_dept !== '' && !isset($dept_map[$filter_dept])) {
+    $filter_dept = '';
+}
 
 $reg_error = '';
 $reg_ok    = '';
@@ -70,7 +74,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
     } else {
         if ($reg_error === '') {
             $sport_id  = (int)($_POST['sport_id'] ?? 0);
-            $unit_id   = (int)($_POST['unit_id'] ?? 0);
+            $dept_name = trim((string)($_POST['department_name'] ?? ''));
+            $unit_id   = isset($dept_map[$dept_name]) ? (int)$dept_map[$dept_name] : 0;
             $role      = 'ATHLETE';
             $prefix    = mb_substr(trim($_POST['title_prefix'] ?? ''), 0, 50);
             $full_name = mb_substr(trim($_POST['full_name'] ?? ''), 0, 150);
@@ -78,10 +83,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
             $gender_in = $_POST['gender'] ?? 'M';
             $gender    = in_array($gender_in, ['M', 'F'], true) ? $gender_in : 'M';
             $phone     = mb_substr(trim($_POST['phone'] ?? ''), 0, 40);
-            $category  = mb_substr(trim($_POST['competition_category'] ?? ''), 0, 120);
+            $category  = mb_substr(trim($_POST['competition_category'] ?? ''), 0, 255);
+            if ($sport_id === 4) {
+                $ath_age    = trim((string)($_POST['athletics_age'] ?? ''));
+                $ath_events = is_array($_POST['athletics_events'] ?? null) ? $_POST['athletics_events'] : [];
+                $category   = build_athletics_category($ath_age, $ath_events);
+            }
 
             if ($sport_id <= 0 || $unit_id <= 0 || $full_name === '' || $phone === '') {
                 $reg_error = 'กรุณากรอกข้อมูลที่มีเครื่องหมาย * (ชนิดกีฬา, ชื่อ-นามสกุล, สังกัด และเบอร์โทรศัพท์) ให้ครบถ้วน';
+            } elseif ($sport_id === 4 && $category === '') {
+                $reg_error = 'สำหรับกรีฑา กรุณาเลือก "ช่วงอายุ" และ "ประเภทการแข่งขัน" อย่างน้อย 1 รายการ';
             } else {
                 // Verify sport_id & unit_id exist
                 $chk_sp = $pdo->prepare("SELECT id FROM sports WHERE id = :id");
@@ -99,12 +111,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
                         $reg_error = "รายชื่อ \"{$full_name}\" มีอยู่ในชนิดกีฬานี้แล้ว (ไม่สามารถลงทะเบียนซ้ำได้)";
                     } else {
                         $ins = $pdo->prepare("
-                            INSERT INTO sport_members (sport_id, unit_id, member_role, title_prefix, full_name, nickname, gender, phone, competition_category)
-                            VALUES (:sport_id, :unit_id, :role, :prefix, :full_name, :nickname, :gender, :phone, :cat)
+                            INSERT INTO sport_members (sport_id, unit_id, department_name, member_role, title_prefix, full_name, nickname, gender, phone, competition_category)
+                            VALUES (:sport_id, :unit_id, :dept_name, :role, :prefix, :full_name, :nickname, :gender, :phone, :cat)
                         ");
                         $ins->execute([
                             ':sport_id'  => $sport_id,
                             ':unit_id'   => $unit_id,
+                            ':dept_name' => $dept_name,
                             ':role'      => $role,
                             ':prefix'    => $prefix,
                             ':full_name' => $full_name,
@@ -145,7 +158,8 @@ foreach ($sports as $sp) {
 $units = $pdo->query("SELECT * FROM units ORDER BY id ASC")->fetchAll();
 
 $sql = "
-    SELECT sm.*, s.sport_no, s.sport_name, u.unit_name
+    SELECT sm.*, s.sport_no, s.sport_name,
+           COALESCE(NULLIF(sm.department_name, ''), u.unit_name) AS unit_name
     FROM sport_members sm
     JOIN sports s ON s.id = sm.sport_id
     JOIN units u ON u.id = sm.unit_id
@@ -156,9 +170,9 @@ if ($filter_sport > 0) {
     $sql .= " AND sm.sport_id = :sport_id";
     $params[':sport_id'] = $filter_sport;
 }
-if ($filter_unit > 0) {
-    $sql .= " AND sm.unit_id = :unit_id";
-    $params[':unit_id'] = $filter_unit;
+if ($filter_dept !== '') {
+    $sql .= " AND COALESCE(NULLIF(sm.department_name, ''), u.unit_name) = :dept";
+    $params[':dept'] = $filter_dept;
 }
 $sql .= " ORDER BY s.sport_no ASC, FIELD(sm.member_role, 'MANAGER', 'COACH', 'COORDINATOR', 'ATHLETE', 'SUB_ATHLETE'), sm.id ASC";
 
@@ -237,6 +251,59 @@ require_once __DIR__ . '/includes/header.php';
     background: #bef264;
     color: #032217;
   }
+  .ath-picker-box {
+    grid-column: 1 / -1;
+    background: #ffffff;
+    border: 1.5px solid #86efac;
+    border-radius: 12px;
+    padding: 14px 16px;
+  }
+  .ath-group-title {
+    font-size: 0.84rem;
+    font-weight: 800;
+    color: var(--green-dark);
+    margin: 10px 0 6px;
+  }
+  .ath-checks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .ath-check-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 11px;
+    border-radius: 9px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    font-size: 0.83rem;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+  }
+  .ath-check-pill:has(input:checked) {
+    background: #dcfce7;
+    border-color: var(--green);
+    color: #064e3b;
+    font-weight: 800;
+  }
+  .ath-matrix-cell {
+    font-size: 0.8rem;
+    vertical-align: top;
+    min-width: 125px;
+  }
+  .ath-runner-chip {
+    display: inline-block;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    color: #065f46;
+    border-radius: 7px;
+    padding: 2px 7px;
+    margin: 2px 2px 0 0;
+    font-weight: 650;
+    font-size: 0.76rem;
+  }
 </style>
 
 <!-- แถบคลิกเลือก Tab ชนิดกีฬาทั้ง 11 ชนิด -->
@@ -278,6 +345,84 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 <?php endif; ?>
 
+<?php if ($filter_sport === 4):
+  $ath_ages = athletics_age_groups();
+  $ath_groups = athletics_event_groups();
+  // สร้างตารางสรุป รายการ × ช่วงอายุ จากรายชื่อกรีฑาทั้งหมด (ไม่ถูกจำกัดด้วยตัวกรองสังกัด หรือกรองตามที่เลือก)
+  $ath_matrix = [];
+  foreach ($members as $m) {
+      $parsed = parse_athletics_category($m['competition_category'] ?? '');
+      if ($parsed['age'] !== '' && !empty($parsed['events'])) {
+          $label = trim($m['title_prefix'] . ' ' . $m['full_name']);
+          if (!empty($m['nickname'])) {
+              $label .= ' (' . $m['nickname'] . ')';
+          }
+          foreach ($parsed['events'] as $ev) {
+              $ath_matrix[$ev][$parsed['age']][] = $label;
+          }
+      }
+  }
+?>
+<div class="white-shell" style="margin-bottom:20px;">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+    <div>
+      <h2 style="font-size:1.15rem; font-weight:850; color:var(--green-dark); margin:0;">🏃 ตารางสรุปประเภทการแข่งขันกรีฑา (แยกตามรายการ × ช่วงอายุ)</h2>
+      <div style="font-size:0.82rem; color:var(--muted); margin-top:2px;">ดูรายชื่อผู้สมัครแต่ละระยะและช่วงอายุ เพื่อช่วยเช็กตำแหน่งที่ยังว่าง (เช่น ไม้ผลัด 4×100, 4×400 และวิ่งรวม)</div>
+    </div>
+    <button type="button" class="btn-primary btn-sm" onclick="openAthleticsRegForm()">➕ ลงชื่อสมัครกรีฑา</button>
+  </div>
+
+  <div style="overflow-x:auto;">
+    <table class="up-table">
+      <thead>
+        <tr>
+          <th style="min-width:170px;">รายการแข่งขัน</th>
+          <?php foreach ($ath_ages as $ag): ?>
+            <th style="text-align:center;"><?= h($ag) ?></th>
+          <?php endforeach; ?>
+          <th style="text-align:center; width:72px;">รวม</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($ath_groups as $grp_title => $ev_list): ?>
+          <tr style="background:#ecfdf5;">
+            <td colspan="<?= count($ath_ages) + 2 ?>" style="font-weight:850; color:var(--green-dark); padding:8px 12px;">
+              🏅 <?= h($grp_title) ?>
+            </td>
+          </tr>
+          <?php foreach ($ev_list as $ev):
+            $row_total = 0;
+            foreach ($ath_ages as $ag) {
+                $row_total += count($ath_matrix[$ev][$ag] ?? []);
+            }
+          ?>
+          <tr>
+            <td><strong><?= h($ev) ?></strong></td>
+            <?php foreach ($ath_ages as $ag):
+              $runners = $ath_matrix[$ev][$ag] ?? [];
+            ?>
+              <td class="ath-matrix-cell" style="text-align:<?= empty($runners) ? 'center' : 'left' ?>;">
+                <?php if (empty($runners)): ?>
+                  <span style="color:#cbd5e1;">-</span>
+                <?php else: ?>
+                  <?php foreach ($runners as $rn): ?>
+                    <span class="ath-runner-chip"><?= h($rn) ?></span>
+                  <?php endforeach; ?>
+                <?php endif; ?>
+              </td>
+            <?php endforeach; ?>
+            <td style="text-align:center; font-weight:800; color:<?= $row_total > 0 ? 'var(--green-dark)' : '#94a3b8' ?>;">
+              <?= $row_total > 0 ? $row_total . ' คน' : '-' ?>
+            </td>
+          </tr>
+          <?php endforeach; ?>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </div>
+</div>
+<?php endif; ?>
+
 <div class="white-shell">
   <?php if ($reg_ok): ?>
     <div class="flash-ok" style="margin-bottom:14px;">✅ <?= h($reg_ok) ?></div>
@@ -301,11 +446,11 @@ require_once __DIR__ . '/includes/header.php';
           <input type="hidden" name="sport_id" value="<?= $filter_sport ?>" />
         <?php endif; ?>
         <label style="font-size:0.84rem; font-weight:700; color:var(--muted);">กรองตามสังกัด:</label>
-        <select name="unit_id" class="form-control" style="width:auto; padding:5px 10px;" onchange="this.form.submit()">
-          <option value="0">-- ทุกส่วนงาน (9 ส่วนงาน) --</option>
-          <?php foreach ($units as $u): ?>
-            <option value="<?= (int)$u['id'] ?>" <?= $filter_unit === (int)$u['id'] ? 'selected' : '' ?>>
-              <?= h($u['unit_name']) ?>
+        <select name="dept" class="form-control" style="width:auto; padding:5px 10px;" onchange="this.form.submit()">
+          <option value="">-- ทุกส่วนงาน (9 ส่วนงาน) --</option>
+          <?php foreach (array_keys($dept_map) as $dname): ?>
+            <option value="<?= h($dname) ?>" <?= $filter_dept === $dname ? 'selected' : '' ?>>
+              <?= h($dname) ?>
             </option>
           <?php endforeach; ?>
         </select>
@@ -336,7 +481,7 @@ require_once __DIR__ . '/includes/header.php';
       </div>
       <div class="form-group">
         <label>ชนิดกีฬา (1–11) *</label>
-        <select name="sport_id" class="form-control" required>
+        <select name="sport_id" id="reg_sport_id" class="form-control" onchange="syncAthleticsPicker()" required>
           <?php foreach ($sports as $sp): $sid = (int)$sp['id']; ?>
             <option value="<?= $sid ?>" <?= ($filter_sport === $sid || (isset($_POST['sport_id']) && (int)$_POST['sport_id'] === $sid)) ? 'selected' : '' ?>>
               <?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?>
@@ -365,10 +510,12 @@ require_once __DIR__ . '/includes/header.php';
       </div>
       <div class="form-group">
         <label>สังกัด (ส่วนงาน) *</label>
-        <select name="unit_id" class="form-control" required>
-          <?php foreach ($units as $u): $uid = (int)$u['id']; ?>
-            <option value="<?= $uid ?>" <?= ($filter_unit === $uid || (isset($_POST['unit_id']) && (int)$_POST['unit_id'] === $uid)) ? 'selected' : '' ?>>
-              <?= h($u['unit_name']) ?>
+        <?php $sel_dept = trim((string)($_POST['department_name'] ?? $filter_dept)); ?>
+        <select name="department_name" class="form-control" required>
+          <option value="">-- เลือกสังกัด (ส่วนงาน) --</option>
+          <?php foreach (array_keys($dept_map) as $dname): ?>
+            <option value="<?= h($dname) ?>" <?= $sel_dept === $dname ? 'selected' : '' ?>>
+              <?= h($dname) ?>
             </option>
           <?php endforeach; ?>
         </select>
@@ -377,9 +524,39 @@ require_once __DIR__ . '/includes/header.php';
         <label>เบอร์โทรศัพท์ติดต่อ *</label>
         <input type="text" name="phone" placeholder="เช่น 081-2345678" value="<?= h($_POST['phone'] ?? '') ?>" class="form-control" required />
       </div>
-      <div class="form-group">
+      <div class="form-group" id="reg_cat_text_group">
         <label>ประเภท / ตำแหน่ง / IGN (ถ้ามี)</label>
         <input type="text" name="competition_category" placeholder="เช่น ทีมผสม / คู่ชาย / IGN: ..." value="<?= h($_POST['competition_category'] ?? '') ?>" class="form-control" />
+      </div>
+      <?php
+        $sel_ath_age = (string)($_POST['athletics_age'] ?? '');
+        $sel_ath_evs = is_array($_POST['athletics_events'] ?? null) ? $_POST['athletics_events'] : [];
+      ?>
+      <div class="ath-picker-box" id="reg_athletics_box" style="display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:8px;">
+          <strong style="color:var(--green-dark); font-size:0.95rem;">🏃 เลือกช่วงอายุและประเภทการแข่งขันกรีฑา *</strong>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="font-size:0.84rem; font-weight:800; color:var(--ink); margin:0;">ช่วงอายุ *:</label>
+            <select name="athletics_age" id="reg_ath_age" class="form-control" style="width:auto; padding:5px 10px;">
+              <option value="">-- เลือกช่วงอายุ --</option>
+              <?php foreach (athletics_age_groups() as $ag): ?>
+                <option value="<?= h($ag) ?>" <?= $sel_ath_age === $ag ? 'selected' : '' ?>><?= h($ag) ?></option>
+              <?php endforeach; ?>
+            </select>
+          </div>
+        </div>
+        <div style="font-size:0.78rem; color:var(--muted); margin-bottom:6px;">เลือกประเภทการแข่งขันที่ต้องการลงสมัครได้มากกว่า 1 รายการ</div>
+        <?php foreach (athletics_event_groups() as $grp_title => $ev_list): ?>
+          <div class="ath-group-title"><?= h($grp_title) ?></div>
+          <div class="ath-checks">
+            <?php foreach ($ev_list as $ev): ?>
+              <label class="ath-check-pill">
+                <input type="checkbox" name="athletics_events[]" value="<?= h($ev) ?>" <?= in_array($ev, $sel_ath_evs, true) ? 'checked' : '' ?> />
+                <span><?= h($ev) ?></span>
+              </label>
+            <?php endforeach; ?>
+          </div>
+        <?php endforeach; ?>
       </div>
       <?php if (!is_admin_logged_in() && $reg_passcode !== ''): ?>
       <div class="form-group">
@@ -394,13 +571,34 @@ require_once __DIR__ . '/includes/header.php';
   </div>
 
   <script>
+    function syncAthleticsPicker() {
+      var sel = document.getElementById('reg_sport_id');
+      if (!sel) return;
+      var isAth = (sel.value === '4');
+      var textGrp = document.getElementById('reg_cat_text_group');
+      var athBox  = document.getElementById('reg_athletics_box');
+      var ageSel  = document.getElementById('reg_ath_age');
+      if (textGrp) textGrp.style.display = isAth ? 'none' : '';
+      if (athBox)  athBox.style.display  = isAth ? 'block' : 'none';
+      if (ageSel)  ageSel.required       = isAth;
+    }
     function toggleRegForm() {
       var box = document.getElementById('athleteRegBox');
       box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
       if (box.style.display === 'block') {
+        syncAthleticsPicker();
         box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
       }
     }
+    function openAthleticsRegForm() {
+      var box = document.getElementById('athleteRegBox');
+      var sel = document.getElementById('reg_sport_id');
+      if (sel) sel.value = '4';
+      box.style.display = 'block';
+      syncAthleticsPicker();
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    syncAthleticsPicker();
   </script>
 
   <div style="overflow-x:auto;">
