@@ -20,7 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
         // Basic anti-spam rate limit for non-admin users (max 20 submissions / 10 min per session)
         $now = time();
         if (!is_admin_logged_in()) {
-            $hist = array_values(array_filter($_SESSION['ath_reg_times'] ?? [], fn($t) => ($now - $t) < 600));
+            $hist = array_values(array_filter($_SESSION['ath_reg_times'] ?? [], function ($t) use ($now) {
+                return ($now - $t) < 600;
+            }));
             if (count($hist) >= 20) {
                 $reg_error = 'ส่งข้อมูลถี่เกินกำหนด กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
             }
