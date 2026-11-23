@@ -1,8 +1,92 @@
 <?php
 require_once __DIR__ . '/config/auth.php';
 
-$filter_sport = isset($_GET['sport_id']) ? (int)$_GET['sport_id'] : 0;
+$filter_sport = isset($_GET['sport_id']) ? (int)$_GET['sport_id'] : (isset($_POST['sport_id']) ? (int)$_POST['sport_id'] : 0);
 $filter_unit  = isset($_GET['unit_id']) ? (int)$_GET['unit_id'] : 0;
+
+$reg_error = '';
+$reg_ok    = '';
+if (isset($_GET['added']) && $_GET['added'] === '1') {
+    $reg_ok = 'ลงทะเบียนเพิ่มรายชื่อนักกีฬาเรียบร้อยแล้ว!';
+}
+
+// ============================================================================
+// HANDLE PUBLIC / COORDINATOR ATHLETE REGISTRATION POST
+// ============================================================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'register_athlete') {
+    if (!verify_csrf()) {
+        $reg_error = 'คำขอไม่ถูกต้อง (CSRF Token หมดอายุ) กรุณารีเฟรชหน้าแล้วลองใหม่อีกครั้ง';
+    } else {
+        // Basic anti-spam rate limit for non-admin users (max 20 submissions / 10 min per session)
+        $now = time();
+        if (!is_admin_logged_in()) {
+            $hist = array_values(array_filter($_SESSION['ath_reg_times'] ?? [], fn($t) => ($now - $t) < 600));
+            if (count($hist) >= 20) {
+                $reg_error = 'ส่งข้อมูลถี่เกินกำหนด กรุณารอสักครู่แล้วลองใหม่อีกครั้ง';
+            }
+        }
+
+        if ($reg_error === '') {
+            $sport_id  = (int)($_POST['sport_id'] ?? 0);
+            $unit_id   = (int)($_POST['unit_id'] ?? 0);
+            $role_in   = $_POST['member_role'] ?? 'ATHLETE';
+            $allowed_roles = is_admin_logged_in()
+                ? ['ATHLETE', 'SUB_ATHLETE', 'MANAGER', 'COACH', 'COORDINATOR']
+                : ['ATHLETE', 'SUB_ATHLETE'];
+            $role      = in_array($role_in, $allowed_roles, true) ? $role_in : 'ATHLETE';
+            $prefix    = mb_substr(trim($_POST['title_prefix'] ?? ''), 0, 50);
+            $full_name = mb_substr(trim($_POST['full_name'] ?? ''), 0, 150);
+            $nickname  = mb_substr(trim($_POST['nickname'] ?? ''), 0, 60);
+            $gender_in = $_POST['gender'] ?? 'M';
+            $gender    = in_array($gender_in, ['M', 'F'], true) ? $gender_in : 'M';
+            $phone     = mb_substr(trim($_POST['phone'] ?? ''), 0, 40);
+            $category  = mb_substr(trim($_POST['competition_category'] ?? ''), 0, 120);
+
+            if ($sport_id <= 0 || $unit_id <= 0 || $full_name === '' || $phone === '') {
+                $reg_error = 'กรุณากรอกข้อมูลที่มีเครื่องหมาย * (ชนิดกีฬา, ชื่อ-นามสกุล, สังกัด และเบอร์โทรศัพท์) ให้ครบถ้วน';
+            } else {
+                // Verify sport_id & unit_id exist
+                $chk_sp = $pdo->prepare("SELECT id FROM sports WHERE id = :id");
+                $chk_sp->execute([':id' => $sport_id]);
+                $chk_un = $pdo->prepare("SELECT id FROM units WHERE id = :id");
+                $chk_un->execute([':id' => $unit_id]);
+
+                if (!$chk_sp->fetchColumn() || !$chk_un->fetchColumn()) {
+                    $reg_error = 'ไม่พบชนิดกีฬาหรือส่วนงานที่เลือก กรุณาลองใหม่อีกครั้ง';
+                } else {
+                    // Duplicate check within same sport
+                    $chk_dup = $pdo->prepare("SELECT id FROM sport_members WHERE sport_id = :sid AND full_name = :fn LIMIT 1");
+                    $chk_dup->execute([':sid' => $sport_id, ':fn' => $full_name]);
+                    if ($chk_dup->fetchColumn()) {
+                        $reg_error = "รายชื่อ \"{$full_name}\" มีอยู่ในชนิดกีฬานี้แล้ว (ไม่สามารถลงทะเบียนซ้ำได้)";
+                    } else {
+                        $ins = $pdo->prepare("
+                            INSERT INTO sport_members (sport_id, unit_id, member_role, title_prefix, full_name, nickname, gender, phone, competition_category)
+                            VALUES (:sport_id, :unit_id, :role, :prefix, :full_name, :nickname, :gender, :phone, :cat)
+                        ");
+                        $ins->execute([
+                            ':sport_id'  => $sport_id,
+                            ':unit_id'   => $unit_id,
+                            ':role'      => $role,
+                            ':prefix'    => $prefix,
+                            ':full_name' => $full_name,
+                            ':nickname'  => $nickname,
+                            ':gender'    => $gender,
+                            ':phone'     => $phone,
+                            ':cat'       => $category,
+                        ]);
+                        if (!is_admin_logged_in()) {
+                            $hist[] = $now;
+                            $_SESSION['ath_reg_times'] = $hist;
+                        }
+                        header("Location: athletes.php?sport_id={$sport_id}&added=1");
+                        exit;
+                    }
+                }
+            }
+        }
+    }
+}
 
 $sports = $pdo->query("
     SELECT s.*,
@@ -158,12 +242,23 @@ require_once __DIR__ . '/includes/header.php';
 <?php endif; ?>
 
 <div class="white-shell">
+  <?php if ($reg_ok): ?>
+    <div class="flash-ok" style="margin-bottom:14px;">✅ <?= h($reg_ok) ?></div>
+  <?php endif; ?>
+  <?php if ($reg_error): ?>
+    <div style="background:#fee2e2; border:1px solid #fca5a5; color:#991b1b; padding:10px 14px; border-radius:10px; font-weight:700; margin-bottom:14px; font-size:0.88rem;">
+      ⚠️ <?= h($reg_error) ?>
+    </div>
+  <?php endif; ?>
+
   <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px;">
     <h2 style="font-size:1.18rem; font-weight:800;">
       <?= $active_sport_info ? 'ทำเนียบผู้จัดการทีมและนักกีฬา: ' . h($active_sport_info['sport_name']) : 'ทำเนียบผู้จัดการทีมและนักกีฬาทั้งหมด (11 ชนิดกีฬา)' ?>
     </h2>
 
     <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+      <button type="button" class="btn-primary btn-sm" onclick="toggleRegForm()">➕ เพิ่มรายชื่อนักกีฬา</button>
+
       <form method="get" style="display:flex; align-items:center; gap:8px; margin:0;">
         <?php if ($filter_sport > 0): ?>
           <input type="hidden" name="sport_id" value="<?= $filter_sport ?>" />
@@ -180,10 +275,97 @@ require_once __DIR__ . '/includes/header.php';
       </form>
 
       <?php if (is_admin_logged_in()): ?>
-        <a href="admin.php?tab=athletes&amp;sport_id=<?= $filter_sport ?>" class="btn-primary btn-sm">⚙️ เพิ่ม/แก้ไขรายชื่อในหน้า Admin ›</a>
+        <a href="admin.php?tab=athletes&amp;sport_id=<?= $filter_sport ?>" class="btn-primary btn-sm" style="background:#0f766e;">⚙️ จัดการ/ลบใน Admin ›</a>
       <?php endif; ?>
     </div>
   </div>
+
+  <!-- ฟอร์มลงทะเบียนเพิ่มรายชื่อนักกีฬาโดยตรง -->
+  <div id="athleteRegBox" style="display:<?= $reg_error ? 'block' : 'none' ?>; background:#f0fdf4; border:2px solid var(--green); border-radius:14px; padding:18px; margin-bottom:18px;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+      <div>
+        <h3 style="font-size:1.05rem; font-weight:850; color:var(--green-dark); margin:0;">📝 ลงทะเบียนเพิ่มรายชื่อนักกีฬาใหม่ (ทัพสีเขียว)</h3>
+        <div style="font-size:0.8rem; color:var(--muted); margin-top:2px;">กรอกข้อมูลให้ครบถ้วน เบอร์โทรศัพท์จะถูกซ่อนเลขกลางอัตโนมัติบนหน้าเว็บสาธารณะตามหลัก PDPA</div>
+      </div>
+      <button type="button" class="btn-sm" style="background:#e2e8f0; color:#0f172a; border:none; cursor:pointer;" onclick="toggleRegForm()">✕ ปิดฟอร์ม</button>
+    </div>
+
+    <form method="post" class="form-grid" style="margin-bottom:0;">
+      <?= csrf_field() ?>
+      <input type="hidden" name="action" value="register_athlete" />
+      <div class="form-group">
+        <label>ชนิดกีฬา (1–11) *</label>
+        <select name="sport_id" class="form-control" required>
+          <?php foreach ($sports as $sp): $sid = (int)$sp['id']; ?>
+            <option value="<?= $sid ?>" <?= ($filter_sport === $sid || (isset($_POST['sport_id']) && (int)$_POST['sport_id'] === $sid)) ? 'selected' : '' ?>>
+              <?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>บทบาท</label>
+        <select name="member_role" class="form-control">
+          <option value="ATHLETE" <?= ($_POST['member_role'] ?? '') === 'ATHLETE' ? 'selected' : '' ?>>นักกีฬาตัวจริง</option>
+          <option value="SUB_ATHLETE" <?= ($_POST['member_role'] ?? '') === 'SUB_ATHLETE' ? 'selected' : '' ?>>นักกีฬาตัวสำรอง</option>
+          <?php if (is_admin_logged_in()): ?>
+            <option value="MANAGER" <?= ($_POST['member_role'] ?? '') === 'MANAGER' ? 'selected' : '' ?>>ผู้จัดการทีม</option>
+            <option value="COACH" <?= ($_POST['member_role'] ?? '') === 'COACH' ? 'selected' : '' ?>>ผู้จัดการร่วม / โค้ช</option>
+          <?php endif; ?>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>คำนำหน้า</label>
+        <input type="text" name="title_prefix" placeholder="นาย / นางสาว / ผศ.ดร." value="<?= h($_POST['title_prefix'] ?? '') ?>" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>ชื่อ - นามสกุล *</label>
+        <input type="text" name="full_name" placeholder="ระบุชื่อ-นามสกุลจริง" value="<?= h($_POST['full_name'] ?? '') ?>" class="form-control" required />
+      </div>
+      <div class="form-group">
+        <label>ชื่อเล่น</label>
+        <input type="text" name="nickname" placeholder="เช่น ปลั๊ก" value="<?= h($_POST['nickname'] ?? '') ?>" class="form-control" />
+      </div>
+      <div class="form-group">
+        <label>เพศ *</label>
+        <select name="gender" class="form-control" required>
+          <option value="M" <?= ($_POST['gender'] ?? 'M') === 'M' ? 'selected' : '' ?>>ชาย</option>
+          <option value="F" <?= ($_POST['gender'] ?? '') === 'F' ? 'selected' : '' ?>>หญิง</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>สังกัด (ส่วนงาน) *</label>
+        <select name="unit_id" class="form-control" required>
+          <?php foreach ($units as $u): $uid = (int)$u['id']; ?>
+            <option value="<?= $uid ?>" <?= ($filter_unit === $uid || (isset($_POST['unit_id']) && (int)$_POST['unit_id'] === $uid)) ? 'selected' : '' ?>>
+              <?= h($u['unit_name']) ?>
+            </option>
+          <?php endforeach; ?>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>เบอร์โทรศัพท์ติดต่อ *</label>
+        <input type="text" name="phone" placeholder="เช่น 081-2345678" value="<?= h($_POST['phone'] ?? '') ?>" class="form-control" required />
+      </div>
+      <div class="form-group">
+        <label>ประเภท / ตำแหน่ง / IGN (ถ้ามี)</label>
+        <input type="text" name="competition_category" placeholder="เช่น ทีมผสม / คู่ชาย / IGN: ..." value="<?= h($_POST['competition_category'] ?? '') ?>" class="form-control" />
+      </div>
+      <div class="form-group" style="display:flex; align-items:flex-end;">
+        <button type="submit" class="btn-primary" style="width:100%;">💾 บันทึกรายชื่อนักกีฬา</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function toggleRegForm() {
+      var box = document.getElementById('athleteRegBox');
+      box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
+      if (box.style.display === 'block') {
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+  </script>
 
   <div style="overflow-x:auto;">
     <table class="up-table">
