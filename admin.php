@@ -196,6 +196,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
         $msg = 'เพิ่มรายชื่อนักกีฬา/ผู้จัดการทีมเรียบร้อยแล้ว!';
     }
 
+    // 6.2 Edit Athlete / Team Manager
+    elseif ($act === 'edit_member') {
+        $stmt = $pdo->prepare("
+            UPDATE sport_members
+            SET sport_id             = :sport_id,
+                unit_id              = :unit_id,
+                member_role          = :role,
+                title_prefix         = :prefix,
+                full_name            = :full_name,
+                nickname             = :nickname,
+                gender               = :gender,
+                phone                = :phone,
+                competition_category = :cat
+            WHERE id = :id
+        ");
+        $stmt->execute([
+            ':sport_id'  => (int)$_POST['sport_id'],
+            ':unit_id'   => (int)$_POST['unit_id'],
+            ':role'      => $_POST['member_role'],
+            ':prefix'    => trim($_POST['title_prefix']),
+            ':full_name' => trim($_POST['full_name']),
+            ':nickname'  => trim($_POST['nickname']),
+            ':gender'    => $_POST['gender'],
+            ':phone'     => trim($_POST['phone']),
+            ':cat'       => trim($_POST['competition_category']),
+            ':id'        => (int)$_POST['member_id'],
+        ]);
+        $active_tab = 'athletes';
+        $filter_sport = (int)$_POST['sport_id'];
+        $msg = 'บันทึกการแก้ไขข้อมูลนักกีฬา/ผู้จัดการทีมเรียบร้อยแล้ว!';
+    }
+
     // 7. Delete Athlete / Team Manager
     elseif ($act === 'delete_member') {
         $stmt = $pdo->prepare("DELETE FROM sport_members WHERE id = :id");
@@ -780,7 +812,8 @@ require_once __DIR__ . '/includes/header.php';
           <th>ชื่อ - นามสกุล</th>
           <th>สังกัด</th>
           <th>เบอร์ติดต่อ</th>
-          <th>ลบ</th>
+          <th>ประเภท/ตำแหน่ง</th>
+          <th>จัดการ</th>
         </tr>
       </thead>
       <tbody>
@@ -789,23 +822,122 @@ require_once __DIR__ . '/includes/header.php';
           <td><?= $idx + 1 ?></td>
           <td><strong><?= (int)$m['sport_no'] ?>. <?= h($m['sport_name']) ?></strong></td>
           <td><?= h($m['member_role']) ?></td>
-          <td><strong><?= h(trim($m['title_prefix'] . ' ' . $m['full_name'])) ?></strong></td>
+          <td>
+            <strong><?= h(trim($m['title_prefix'] . ' ' . $m['full_name'])) ?></strong>
+            <?php if (!empty($m['nickname'])): ?>
+              <span style="color:var(--muted); font-size:0.82rem;">(<?= h($m['nickname']) ?>)</span>
+            <?php endif; ?>
+          </td>
           <td><?= h($m['unit_name']) ?></td>
           <td><?= h($m['phone']) ?></td>
+          <td><?= h($m['competition_category'] ?: '-') ?></td>
           <td>
-            <form method="post" style="margin:0;" onsubmit="return confirm('ลบรายชื่อนี้?');">
-              <?= csrf_field() ?>
-              <input type="hidden" name="action" value="delete_member" />
-              <input type="hidden" name="sport_id" value="<?= $filter_sport ?>" />
-              <input type="hidden" name="member_id" value="<?= (int)$m['id'] ?>" />
-              <button type="submit" class="btn-sm btn-danger">ลบ</button>
-            </form>
+            <div style="display:flex; gap:6px; align-items:center; flex-wrap:nowrap;">
+              <button type="button" class="btn-sm" style="background:#f59e0b; color:#fff; border:none; cursor:pointer;"
+                data-id="<?= (int)$m['id'] ?>"
+                data-sport="<?= (int)$m['sport_id'] ?>"
+                data-unit="<?= (int)$m['unit_id'] ?>"
+                data-role="<?= h($m['member_role']) ?>"
+                data-prefix="<?= h($m['title_prefix']) ?>"
+                data-fullname="<?= h($m['full_name']) ?>"
+                data-nickname="<?= h($m['nickname']) ?>"
+                data-gender="<?= h($m['gender']) ?>"
+                data-phone="<?= h($m['phone']) ?>"
+                data-cat="<?= h($m['competition_category']) ?>"
+                onclick="openEditMemberModal(this)">✏️ แก้ไข</button>
+              <form method="post" style="margin:0;" onsubmit="return confirm('ลบรายชื่อนี้?');">
+                <?= csrf_field() ?>
+                <input type="hidden" name="action" value="delete_member" />
+                <input type="hidden" name="sport_id" value="<?= $filter_sport ?>" />
+                <input type="hidden" name="member_id" value="<?= (int)$m['id'] ?>" />
+                <button type="submit" class="btn-sm btn-danger">ลบ</button>
+              </form>
+            </div>
           </td>
         </tr>
         <?php endforeach; ?>
       </tbody>
     </table>
   </div>
+
+  <!-- Modal แก้ไขข้อมูลนักกีฬา / ผู้จัดการทีม -->
+  <div id="editMemberModal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:999; align-items:center; justify-content:center; padding:16px;">
+    <div style="background:#fff; border-radius:16px; border:2px solid var(--green); max-width:720px; width:100%; padding:24px; box-shadow:0 20px 50px rgba(0,0,0,0.3); max-height:92vh; overflow-y:auto;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; padding-bottom:10px; border-bottom:1px solid var(--line);">
+        <h3 style="font-size:1.15rem; font-weight:850; color:var(--green-dark); margin:0;">✏️ แก้ไขข้อมูลนักกีฬา / ผู้จัดการทีม</h3>
+        <button type="button" class="btn-sm" style="background:#e2e8f0; color:#0f172a; border:none; cursor:pointer;" onclick="closeEditMemberModal()">✕ ปิด</button>
+      </div>
+      <form method="post" class="form-grid" style="margin-bottom:0;">
+        <?= csrf_field() ?>
+        <input type="hidden" name="action" value="edit_member" />
+        <input type="hidden" name="member_id" id="em_id" value="" />
+        <div class="form-group">
+          <label>ชนิดกีฬา (1–11) *</label>
+          <select name="sport_id" id="em_sport" class="form-control" required>
+            <?php foreach ($sports as $sp): ?>
+              <option value="<?= (int)$sp['id'] ?>"><?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>บทบาท</label>
+          <select name="member_role" id="em_role" class="form-control">
+            <option value="ATHLETE">นักกีฬา</option>
+            <option value="SUB_ATHLETE">นักกีฬาตัวสำรอง</option>
+            <option value="MANAGER">ผู้จัดการทีม</option>
+            <option value="COACH">ผู้จัดการร่วม / โค้ช</option>
+            <option value="COORDINATOR">ผู้ประสานงานส่วนงาน</option>
+          </select>
+        </div>
+        <div class="form-group"><label>คำนำหน้า</label><input type="text" name="title_prefix" id="em_prefix" class="form-control" /></div>
+        <div class="form-group"><label>ชื่อ - นามสกุล *</label><input type="text" name="full_name" id="em_fullname" class="form-control" required /></div>
+        <div class="form-group"><label>ชื่อเล่น</label><input type="text" name="nickname" id="em_nickname" class="form-control" /></div>
+        <div class="form-group">
+          <label>สังกัด (ส่วนงาน) *</label>
+          <select name="unit_id" id="em_unit" class="form-control" required>
+            <?php foreach ($units as $u): ?>
+              <option value="<?= (int)$u['id'] ?>"><?= h($u['unit_name']) ?></option>
+            <?php endforeach; ?>
+          </select>
+        </div>
+        <div class="form-group"><label>เบอร์ติดต่อ</label><input type="text" name="phone" id="em_phone" class="form-control" required /></div>
+        <div class="form-group">
+          <label>เพศ</label>
+          <select name="gender" id="em_gender" class="form-control">
+            <option value="M">ชาย</option>
+            <option value="F">หญิง</option>
+          </select>
+        </div>
+        <div class="form-group"><label>ประเภท/ตำแหน่ง</label><input type="text" name="competition_category" id="em_cat" class="form-control" /></div>
+        <div class="form-group" style="display:flex; gap:8px; align-items:flex-end;">
+          <button type="submit" class="btn-primary" style="flex:1;">💾 บันทึกการแก้ไข</button>
+          <button type="button" class="btn-sm" style="background:#e2e8f0; color:#0f172a; border:none; padding:9px 14px; cursor:pointer;" onclick="closeEditMemberModal()">ยกเลิก</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script>
+    function openEditMemberModal(btn) {
+      document.getElementById('em_id').value       = btn.getAttribute('data-id') || '';
+      document.getElementById('em_sport').value    = btn.getAttribute('data-sport') || '';
+      document.getElementById('em_unit').value     = btn.getAttribute('data-unit') || '';
+      document.getElementById('em_role').value     = btn.getAttribute('data-role') || 'ATHLETE';
+      document.getElementById('em_prefix').value   = btn.getAttribute('data-prefix') || '';
+      document.getElementById('em_fullname').value = btn.getAttribute('data-fullname') || '';
+      document.getElementById('em_nickname').value = btn.getAttribute('data-nickname') || '';
+      document.getElementById('em_gender').value   = btn.getAttribute('data-gender') || 'M';
+      document.getElementById('em_phone').value    = btn.getAttribute('data-phone') || '-';
+      document.getElementById('em_cat').value      = btn.getAttribute('data-cat') || '';
+      document.getElementById('editMemberModal').style.display = 'flex';
+    }
+    function closeEditMemberModal() {
+      document.getElementById('editMemberModal').style.display = 'none';
+    }
+    document.getElementById('editMemberModal').addEventListener('click', function(e) {
+      if (e.target === this) closeEditMemberModal();
+    });
+  </script>
 </div>
 <?php endif; ?>
 
