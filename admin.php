@@ -154,7 +154,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
             VALUES (:sport_id, :match_date, :start_time, :end_time, :team_div, :opp, :venue, 'ตามกำหนด')
         ");
         $stmt->execute([
-            ':sport_id'   => (int)$_POST['sport_id'],
+            ':sport_id'   => !empty($_POST['sport_id']) ? (int)$_POST['sport_id'] : null,
             ':match_date' => $_POST['match_date'],
             ':start_time' => $_POST['start_time'],
             ':end_time'   => $_POST['end_time'] ?: null,
@@ -348,10 +348,10 @@ $sports     = $pdo->query("
     ORDER BY s.sport_no ASC
 ")->fetchAll();
 $schedules  = $pdo->query("
-    SELECT ms.*, s.sport_name
+    SELECT ms.*, COALESCE(s.sport_name, ms.team_division) AS sport_name
     FROM match_schedules ms
-    JOIN sports s ON s.id = ms.sport_id
-    ORDER BY ms.match_date ASC, ms.start_time ASC
+    LEFT JOIN sports s ON s.id = ms.sport_id
+    ORDER BY ms.match_date ASC, ms.start_time ASC, ms.id ASC
 ")->fetchAll();
 $med_items  = $pdo->query("SELECT * FROM medical_items ORDER BY item_code ASC")->fetchAll();
 $tx_list    = $pdo->query("
@@ -689,25 +689,29 @@ require_once __DIR__ . '/includes/header.php';
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="add_match" />
     <div class="form-group">
-      <label>ชนิดกีฬา</label>
-      <select name="sport_id" class="form-control" required>
+      <label>ชนิดกีฬา / กิจกรรม</label>
+      <select name="sport_id" class="form-control">
         <?php foreach ($sports as $sp): ?>
           <option value="<?= (int)$sp['id'] ?>"><?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?></option>
         <?php endforeach; ?>
+        <option value="">กองเชียร์ / กิจกรรมอื่น</option>
       </select>
     </div>
     <div class="form-group"><label>วันที่แข่งขัน</label><input type="date" name="match_date" value="2026-12-17" class="form-control" required /></div>
-    <div class="form-group"><label>เวลาเริ่ม</label><input type="time" name="start_time" value="17:00" class="form-control" required /></div>
-    <div class="form-group"><label>เวลาสิ้นสุด</label><input type="time" name="end_time" value="18:00" class="form-control" /></div>
-    <div class="form-group"><label>ประเภท / รุ่น</label><input type="text" name="team_division" placeholder="เช่น ทีมชาย / คู่ผสม" class="form-control" required /></div>
-    <div class="form-group"><label>คู่แข่งขัน</label><input type="text" name="opponent_color" placeholder="เช่น สีฟ้า – สีเขียว" class="form-control" required /></div>
+    <div class="form-group"><label>เวลาเริ่ม</label><input type="time" name="start_time" value="16:30" class="form-control" required /></div>
+    <div class="form-group"><label>เวลาสิ้นสุด</label><input type="time" name="end_time" value="21:00" class="form-control" /></div>
+    <div class="form-group"><label>ประเภท / รุ่น</label><input type="text" name="team_division" placeholder="เช่น ทีมชาย / คู่ผสม / กองเชียร์" class="form-control" required /></div>
+    <div class="form-group"><label>คู่แข่งขัน / รายการ</label><input type="text" name="opponent_color" placeholder="เช่น สีฟ้า – สีเขียว" class="form-control" required /></div>
     <div class="form-group">
       <label>สนามแข่งขัน</label>
       <select name="venue" class="form-control">
         <option value="อาคารสงวนเสริมศรี">อาคารสงวนเสริมศรี</option>
-        <option value="สนามกีฬากลางมหาวิทยาลัยพะเยา">สนามกีฬากลางมหาวิทยาลัยพะเยา</option>
-        <option value="สนามเปตอง มหาวิทยาลัยพะเยา">สนามเปตอง มหาวิทยาลัยพะเยา</option>
-        <option value="สนามเทนนิส มหาวิทยาลัยพะเยา">สนามเทนนิส มหาวิทยาลัยพะเยา</option>
+        <option value="อาคารสงวนเสริมศรี ชั้น 2">อาคารสงวนเสริมศรี ชั้น 2</option>
+        <option value="สนามฟุตบอลกีฬากลาง ม.พะเยา">สนามฟุตบอลกีฬากลาง ม.พะเยา</option>
+        <option value="กรีฑากีฬากลาง ม.พะเยา">กรีฑากีฬากลาง ม.พะเยา</option>
+        <option value="สนามเปตอง ม.พะเยา">สนามเปตอง ม.พะเยา</option>
+        <option value="สนามเทนนิส ม.พะเยา">สนามเทนนิส ม.พะเยา</option>
+        <option value="อาคารเรียนรวม ห้องประชุม BCA">อาคารเรียนรวม ห้องประชุม BCA</option>
       </select>
     </div>
     <button type="submit" class="btn-primary">+ เพิ่มตารางแข่ง</button>
@@ -729,7 +733,7 @@ require_once __DIR__ . '/includes/header.php';
         <?php foreach ($schedules as $m): ?>
         <tr>
           <td><strong><?= h($m['match_date']) ?></strong></td>
-          <td><?= substr(h($m['start_time']), 0, 5) ?> น.</td>
+          <td><?= substr(h($m['start_time']), 0, 5) ?><?= $m['end_time'] ? '–' . substr(h($m['end_time']), 0, 5) : '' ?> น.</td>
           <td><strong><?= h($m['sport_name']) ?></strong></td>
           <td><?= h($m['opponent_color']) ?> (<?= h($m['team_division']) ?>)</td>
           <td><?= h($m['venue']) ?></td>

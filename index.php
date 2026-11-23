@@ -18,7 +18,7 @@ $unit_sums = $pdo->query("
     SELECT
         SUM(staff_count) AS total_staff,
         SUM(employee_count) AS total_emp,
-        SUM(ROUND(staff_count * (expected_participation_pct/100)) * 100) AS expected_headcount_money,
+        SUM(staff_count * 100) AS full_headcount_money,
         SUM(exec_support_pledged) AS total_exec_pledged,
         SUM(exec_support_received) AS total_exec_received,
         SUM(headcount_received) AS total_headcount_received
@@ -27,9 +27,9 @@ $unit_sums = $pdo->query("
 
 $total_athletes = $pdo->query("SELECT COUNT(*) FROM sport_members")->fetchColumn();
 
-$t1_realistic = 80000;
+$t1_realistic = (float)($unit_sums['total_exec_pledged'] ?: 80000);
 $t2_realistic = 50000;
-$t3_realistic = (float)($unit_sums['expected_headcount_money'] ?: 36200);
+$t3_realistic = (float)($unit_sums['full_headcount_money'] ?: 51700);
 $grand_realistic = $t1_realistic + $t2_realistic + $t3_realistic;
 
 // คำนวณยอดจัดสรรแล้วและยอดคงเหลือของแต่ละก้อน

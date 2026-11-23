@@ -9,10 +9,10 @@ $sports = $pdo->query("
 ")->fetchAll();
 
 $schedules = $pdo->query("
-    SELECT ms.*, s.sport_name
+    SELECT ms.*, COALESCE(s.sport_name, ms.team_division) AS sport_name
     FROM match_schedules ms
-    JOIN sports s ON s.id = ms.sport_id
-    ORDER BY ms.match_date ASC, ms.start_time ASC
+    LEFT JOIN sports s ON s.id = ms.sport_id
+    ORDER BY ms.match_date ASC, ms.start_time ASC, ms.id ASC
 ")->fetchAll();
 
 $grouped_matches = [];
@@ -51,7 +51,7 @@ require_once __DIR__ . '/includes/header.php';
           <div class="sport-circle-icon">🏅</div>
           <div>
             <div class="item-main-title"><?= h($m['opponent_color']) ?></div>
-            <div class="item-sub-title"><?= h($m['sport_name']) ?> · <?= h($m['team_division']) ?></div>
+            <div class="item-sub-title"><?= h($m['sport_name']) ?><?= ($m['team_division'] && $m['team_division'] !== $m['sport_name']) ? ' · ' . h($m['team_division']) : '' ?></div>
           </div>
         </div>
         <div class="item-time">
