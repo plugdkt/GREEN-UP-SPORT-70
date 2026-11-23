@@ -31,11 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'regis
         if ($reg_error === '') {
             $sport_id  = (int)($_POST['sport_id'] ?? 0);
             $unit_id   = (int)($_POST['unit_id'] ?? 0);
-            $role_in   = $_POST['member_role'] ?? 'ATHLETE';
-            $allowed_roles = is_admin_logged_in()
-                ? ['ATHLETE', 'SUB_ATHLETE', 'MANAGER', 'COACH', 'COORDINATOR']
-                : ['ATHLETE', 'SUB_ATHLETE'];
-            $role      = in_array($role_in, $allowed_roles, true) ? $role_in : 'ATHLETE';
+            $role      = 'ATHLETE';
             $prefix    = mb_substr(trim($_POST['title_prefix'] ?? ''), 0, 50);
             $full_name = mb_substr(trim($_POST['full_name'] ?? ''), 0, 150);
             $nickname  = mb_substr(trim($_POST['nickname'] ?? ''), 0, 60);
@@ -303,17 +299,6 @@ require_once __DIR__ . '/includes/header.php';
               <?= (int)$sp['sport_no'] ?>. <?= h($sp['sport_name']) ?>
             </option>
           <?php endforeach; ?>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>บทบาท</label>
-        <select name="member_role" class="form-control">
-          <option value="ATHLETE" <?= ($_POST['member_role'] ?? '') === 'ATHLETE' ? 'selected' : '' ?>>นักกีฬาตัวจริง</option>
-          <option value="SUB_ATHLETE" <?= ($_POST['member_role'] ?? '') === 'SUB_ATHLETE' ? 'selected' : '' ?>>นักกีฬาตัวสำรอง</option>
-          <?php if (is_admin_logged_in()): ?>
-            <option value="MANAGER" <?= ($_POST['member_role'] ?? '') === 'MANAGER' ? 'selected' : '' ?>>ผู้จัดการทีม</option>
-            <option value="COACH" <?= ($_POST['member_role'] ?? '') === 'COACH' ? 'selected' : '' ?>>ผู้จัดการร่วม / โค้ช</option>
-          <?php endif; ?>
         </select>
       </div>
       <div class="form-group">
