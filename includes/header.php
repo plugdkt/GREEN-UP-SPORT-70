@@ -9,20 +9,26 @@ $is_admin = is_admin_logged_in();
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title><?= h($page_title ?? 'UP SPORT 2027 · ระบบรายงานทัพสีเขียว (GREEN TEAM)') ?></title>
-  <link rel="stylesheet" href="assets/css/green-theme.css" />
+  <link rel="stylesheet" href="assets/css/green-theme.css?v=3" />
 </head>
 <body>
   <header class="masthead">
     <div class="wrap header-row">
-      <a href="index.php" class="brand">
-        <div class="brand-badge">UP</div>
-        <div class="brand-text">
-          <strong>UP SPORT 2027 · GREEN TEAM</strong>
-          <span>ระบบรายงานงบประมาณและทัพนักกีฬาสีเขียว ม.พะเยา</span>
-        </div>
-      </a>
+      <div class="header-top-bar">
+        <a href="index.php" class="brand">
+          <div class="brand-badge">UP</div>
+          <div class="brand-text">
+            <strong>UP SPORT 2027 · GREEN TEAM</strong>
+            <span>ระบบรายงานงบประมาณและทัพนักกีฬาสีเขียว ม.พะเยา</span>
+          </div>
+        </a>
+        <button type="button" class="nav-toggle-btn" id="mobileNavToggle" aria-expanded="false" aria-controls="mainTopNav" onclick="toggleMobileNav()">
+          <span class="nav-toggle-icon" aria-hidden="true">☰</span>
+          <span>เมนู</span>
+        </button>
+      </div>
 
-      <nav class="top-nav">
+      <nav class="top-nav" id="mainTopNav">
         <a href="index.php" class="nav-link <?= $current_page === 'index.php' ? 'active' : '' ?>">💰 1. รายงานงบ 3 ก้อน</a>
         <a href="units.php" class="nav-link <?= $current_page === 'units.php' ? 'active' : '' ?>">🏢 2. งบสมทบ 9 ส่วนงาน</a>
         <a href="sports.php" class="nav-link <?= $current_page === 'sports.php' ? 'active' : '' ?>">📅 3. ตารางแข่ง &amp; งบกีฬา</a>
@@ -43,6 +49,17 @@ $is_admin = is_admin_logged_in();
       </nav>
     </div>
   </header>
+  <script>
+    function toggleMobileNav() {
+      var nav = document.getElementById('mainTopNav');
+      var btn = document.getElementById('mobileNavToggle');
+      if (!nav || !btn) return;
+      var open = nav.classList.toggle('open');
+      btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+      var ico = btn.querySelector('.nav-toggle-icon');
+      if (ico) ico.textContent = open ? '✕' : '☰';
+    }
+  </script>
 
   <main class="wrap inner">
     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">

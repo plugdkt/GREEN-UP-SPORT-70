@@ -601,6 +601,70 @@ require_once __DIR__ . '/includes/header.php';
     syncAthleticsPicker();
   </script>
 
+  <?php
+    $gender_split_sports = [
+        2  => ['icon' => '🏸', 'label' => 'แบดมินตัน'],
+        3  => ['icon' => '🏐', 'label' => 'วอลเลย์บอล'],
+        9  => ['icon' => '⚪', 'label' => 'เปตอง'],
+        11 => ['icon' => '🎮', 'label' => 'E-SPORT'],
+    ];
+    if (isset($gender_split_sports[$filter_sport])):
+      $gs_meta = $gender_split_sports[$filter_sport];
+      $gender_groups = [
+          'M' => ['title' => $gs_meta['icon'] . ' ทีมชาย (' . $gs_meta['label'] . ' ชาย)', 'bg' => '#ecfdf5', 'border' => '#6ee7b7', 'color' => '#065f46', 'rows' => []],
+          'F' => ['title' => $gs_meta['icon'] . ' ทีมหญิง (' . $gs_meta['label'] . ' หญิง)', 'bg' => '#fdf2f8', 'border' => '#f9a8d4', 'color' => '#9d174d', 'rows' => []],
+      ];
+      foreach ($members as $m) {
+          $gkey = ($m['gender'] === 'F') ? 'F' : 'M';
+          $gender_groups[$gkey]['rows'][] = $m;
+      }
+  ?>
+    <?php foreach ($gender_groups as $grp): ?>
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin:16px 0 8px; padding:10px 14px; border-radius:12px; background:<?= $grp['bg'] ?>; border:1.5px solid <?= $grp['border'] ?>;">
+        <strong style="font-size:1.02rem; color:<?= $grp['color'] ?>;"><?= h($grp['title']) ?></strong>
+        <span class="status-pill" style="background:#fff; color:<?= $grp['color'] ?>; border:1px solid <?= $grp['border'] ?>;"><?= count($grp['rows']) ?> คน</span>
+      </div>
+      <div style="overflow-x:auto; margin-bottom:14px;">
+        <table class="up-table">
+          <thead>
+            <tr>
+              <th>ลำดับ</th>
+              <th>บทบาท</th>
+              <th>ชื่อ - นามสกุล</th>
+              <th>สังกัด (ส่วนงาน)</th>
+              <th>เบอร์โทรศัพท์ติดต่อ</th>
+              <th>ประเภท/ตำแหน่ง</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if (empty($grp['rows'])): ?>
+              <tr>
+                <td colspan="6" style="text-align:center; padding:20px; color:var(--muted);">ยังไม่มีรายชื่อนักกีฬาในทีมนี้</td>
+              </tr>
+            <?php else: ?>
+              <?php foreach ($grp['rows'] as $idx => $m):
+                [$r_text, $r_cls] = $role_labels[$m['member_role']] ?? [$m['member_role'], ''];
+              ?>
+              <tr>
+                <td><?= $idx + 1 ?></td>
+                <td><span class="status-pill <?= $r_cls ?>"><?= h($r_text) ?></span></td>
+                <td>
+                  <strong><?= h(trim($m['title_prefix'] . ' ' . $m['full_name'])) ?></strong>
+                  <?php if ($m['nickname']): ?>
+                    <span style="color:var(--muted);"> (<?= h($m['nickname']) ?>)</span>
+                  <?php endif; ?>
+                </td>
+                <td><?= h($m['unit_name']) ?></td>
+                <td style="font-weight:750; color:var(--green-dark);"><?= h(mask_phone($m['phone'], is_admin_logged_in())) ?></td>
+                <td><?= h($m['competition_category'] ?: '-') ?></td>
+              </tr>
+              <?php endforeach; ?>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
+    <?php endforeach; ?>
+  <?php else: ?>
   <div style="overflow-x:auto;">
     <table class="up-table">
       <thead>
@@ -642,6 +706,7 @@ require_once __DIR__ . '/includes/header.php';
       </tbody>
     </table>
   </div>
+  <?php endif; ?>
 </div>
 
 <?php require_once __DIR__ . '/includes/footer.php'; ?>
