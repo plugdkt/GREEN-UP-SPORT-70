@@ -605,6 +605,7 @@ require_once __DIR__ . '/includes/header.php';
     $gender_split_sports = [
         2  => ['icon' => '🏸', 'label' => 'แบดมินตัน'],
         3  => ['icon' => '🏐', 'label' => 'วอลเลย์บอล'],
+        7  => ['icon' => '🏀', 'label' => 'บาสเกตบอล'],
         9  => ['icon' => '⚪', 'label' => 'เปตอง'],
         11 => ['icon' => '🎮', 'label' => 'E-SPORT'],
     ];
